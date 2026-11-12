@@ -1,0 +1,74 @@
+spring:
+  application:
+    name: khmerdub-api
+  config:
+    # Repo-root .env (KEY=VALUE). Tests point KHMERDUB_ENV_FILE at a missing file.
+    import: optional:file:${KHMERDUB_ENV_FILE:../../.env}[.properties]
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:${POSTGRES_PORT:5442}/${POSTGRES_DB:khmerdub}
+    username: ${POSTGRES_USER:khmerdub}
+    password: ${POSTGRES_PASSWORD:}
+    hikari:
+      maximum-pool-size: 10
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+  mvc:
+    problemdetails:
+      enabled: true
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  address: 127.0.0.1
+  port: ${API_PORT:8180}
+  shutdown: graceful
+  error:
+    include-stacktrace: never
+    include-message: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+  health:
+    diskspace:
+      path: ${KHMERDUB_STORAGE_ROOT:D:/KhmerDub/data}
+      threshold: 5GB
+
+khmerdub:
+  version: 0.1.0
+  storage-root: ${KHMERDUB_STORAGE_ROOT:D:/KhmerDub/data}
+  internal-token: ${KHMERDUB_INTERNAL_TOKEN:}
+  cloud-enabled: ${KHMERDUB_CLOUD_ENABLED:false}
+  min-free-disk-gb: 30
+  # Browser origins allowed to call the API / WebSocket.
+  allowed-origins:
+    - http://localhost:${WEB_PORT:3000}
+    - http://127.0.0.1:${WEB_PORT:3000}
+  # Host header values accepted (DNS-rebinding guard). Loopback names only by default.
+  allowed-hosts:
+    - 127.0.0.1
+    - localhost
+    - "[::1]"
+  # Extra Host values accepted ONLY on /internal/** (which also requires the internal token):
+  # the Linux worker container reaches the API through Docker Desktop's host.docker.internal.
+  internal-allowed-hosts:
+    - host.docker.internal
+  ai-service:
+    url: http://127.0.0.1:${AI_PORT:8765}
+    connect-timeout: 2s
+    read-timeout: 5s
+  health-broadcast-interval-ms: 15000

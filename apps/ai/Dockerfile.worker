@@ -1,0 +1,26 @@
+# KhmerDub Celery worker (Linux). Runs on Docker Desktop's WSL2 VM.
+# Media files stay on Windows (bind-mounted at /data). Source is bind-mounted at /app/khmerdub_ai in dev.
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONPATH=/app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg tini \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd --create-home --uid 1000 worker
+WORKDIR /app
+
+COPY requirements.lock.txt .
+RUN pip install --no-cache-dir -r requirements.lock.txt
+
+# Baked-in copy of the code; in dev it is overridden by a read-only bind mount.
+COPY khmerdub_ai ./khmerdub_ai
+
+USER worker
+# tini as PID 1: forwards SIGTERM to Celery (warm shutdown) and reaps child processes.
+ENTRYPOINT ["tini", "--"]
+CMD ["celery", "-A", "khmerdub_ai.celery_app", "worker", "-Q", "cpu", "-c", "1", "-n", "cpu@%h", "--loglevel=INFO"]

@@ -1,0 +1,9 @@
+khmerdub:
+  internal-token: test-internal-token-0123456789abcdef0123456789
+  storage-root: target/test-storage
+  ai-service:
+    # Nothing listens here: the AI service is deliberately unreachable in these tests.
+    url: http://127.0.0.1:1
+    connect-timeout: 1s
+    read-timeout: 1s
+  health-broadcast-interval-ms: 3600000

@@ -1,0 +1,47 @@
+# Secrets / local config
+.env
+.env.*
+!.env.example
+
+# OS / editors / IDE agents
+.DS_Store
+Thumbs.db
+.qodo/
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+
+# Logs / runtime
+*.log
+.run/
+
+# Media must never enter git (storage root lives outside the repo)
+*.mp4
+*.mkv
+*.mov
+*.wav
+*.mp3
+*.m4a
+*.aac
+*.flac
+
+# Java (apps/api)
+apps/api/target/
+apps/api/.mvn/wrapper/maven-wrapper.jar
+
+# Python (apps/ai)
+apps/ai/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Node (apps/web)
+node_modules/
+apps/web/.nuxt/
+apps/web/.output/
+apps/web/.data/
+apps/web/dist/
+apps/web/coverage/

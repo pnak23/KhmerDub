@@ -1,0 +1,97 @@
+// KhmerDub AI - app-level styles. Bootstrap does the heavy lifting; keep this file small.
+:root {
+  --kd-sidebar-width: 232px;
+  --kd-sidebar-bg: #1d2430;
+  --kd-sidebar-fg: #c3ccd8;
+  --kd-sidebar-muted: #8592a3;
+  --kd-sidebar-hover: rgba(255, 255, 255, 0.06);
+  --kd-sidebar-active: rgba(255, 255, 255, 0.12);
+  --kd-body-bg: #f4f5f7;
+}
+
+body {
+  background: var(--kd-body-bg);
+}
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.app-sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: var(--kd-sidebar-width);
+  height: 100vh;
+  background: var(--kd-sidebar-bg);
+  color: var(--kd-sidebar-fg);
+
+  .brand {
+    padding: 1.1rem 1.25rem;
+    font-weight: 600;
+    color: #fff;
+
+    small {
+      color: var(--kd-sidebar-muted);
+      font-weight: 400;
+    }
+  }
+
+  .nav-link {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0.1rem 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--bs-border-radius);
+    color: var(--kd-sidebar-fg);
+
+    &:hover {
+      background: var(--kd-sidebar-hover);
+      color: #fff;
+    }
+
+    &.active {
+      background: var(--kd-sidebar-active);
+      color: #fff;
+    }
+  }
+
+  .sidebar-footer {
+    margin-top: auto;
+    padding: 1rem 1.25rem;
+    font-size: 0.8rem;
+    color: var(--kd-sidebar-muted);
+  }
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  padding: 1.5rem 2rem;
+}
+
+.kd-mono {
+  font-family: var(--bs-font-monospace);
+  font-size: 0.85em;
+}
+
+.kd-dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0;
+
+  dt {
+    font-weight: 500;
+    color: var(--bs-secondary-color);
+  }
+
+  dd {
+    margin: 0;
+    word-break: break-all;
+  }
+}
