@@ -38,7 +38,7 @@ class SchemaMigrationTest {
         String version = jdbc.queryForObject(
                 "SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank DESC LIMIT 1",
                 String.class);
-        assertThat(version).isEqualTo("1");
+        assertThat(version).isEqualTo("2");
     }
 
     @Test

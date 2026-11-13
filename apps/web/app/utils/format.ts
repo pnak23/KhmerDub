@@ -47,3 +47,47 @@ export function formatBytes(bytes: number | null | undefined): string {
 export function fromNow(iso: string | null | undefined): string {
   return iso ? dayjs(iso).fromNow() : '—'
 }
+
+/** 5025000 -> "1:23:45"; 65000 -> "1:05". */
+export function formatDuration(ms: number | null | undefined): string {
+  if (ms === null || ms === undefined || ms < 0) return '—'
+  const total = Math.round(ms / 1000)
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`
+}
+
+export type JobVariant = 'secondary' | 'primary' | 'warning' | 'success' | 'danger' | 'dark'
+
+export function jobVariant(status: string | null | undefined): JobVariant {
+  switch (status) {
+    case 'RUNNING': return 'primary'
+    case 'PAUSING':
+    case 'PAUSED': return 'warning'
+    case 'COMPLETED': return 'success'
+    case 'FAILED': return 'danger'
+    case 'CANCELLING':
+    case 'CANCELLED': return 'dark'
+    default: return 'secondary'
+  }
+}
+
+export function chunkVariant(status: string): string {
+  switch (status) {
+    case 'COMPLETED':
+    case 'SKIPPED': return 'success'
+    case 'RUNNING': return 'primary'
+    case 'DISPATCHED': return 'info'
+    case 'FAILED': return 'danger'
+    case 'CANCELLED': return 'dark'
+    default: return 'secondary'
+  }
+}
+
+export function humanize(value: string | null | undefined): string {
+  if (!value) return '—'
+  const s = value.replace(/_/g, ' ').toLowerCase()
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}

@@ -48,6 +48,12 @@ public class DubProject {
     @Column(name = "processing_profile_id")
     private UUID processingProfileId;
 
+    @Column(name = "source_audio_stream_index")
+    private Integer sourceAudioStreamIndex;
+
+    @Column(name = "archived_at")
+    private OffsetDateTime archivedAt;
+
     @Version
     @Column(nullable = false)
     private long version;
@@ -83,6 +89,11 @@ public class DubProject {
     public void setDurationMs(Long durationMs) { this.durationMs = durationMs; }
     public UUID getProcessingProfileId() { return processingProfileId; }
     public void setProcessingProfileId(UUID processingProfileId) { this.processingProfileId = processingProfileId; }
+    public Integer getSourceAudioStreamIndex() { return sourceAudioStreamIndex; }
+    public void setSourceAudioStreamIndex(Integer index) { this.sourceAudioStreamIndex = index; }
+    public OffsetDateTime getArchivedAt() { return archivedAt; }
+    public void setArchivedAt(OffsetDateTime archivedAt) { this.archivedAt = archivedAt; }
+    public boolean isArchived() { return archivedAt != null; }
     public long getVersion() { return version; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }

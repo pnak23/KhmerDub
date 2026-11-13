@@ -59,7 +59,7 @@ class SecurityAndHealthTest {
                 .andExpect(jsonPath("$.status").value("WARN"))
                 .andExpect(jsonPath("$.version").value("0.1.0"))
                 .andExpect(jsonPath("$.components.database.status").value("UP"))
-                .andExpect(jsonPath("$.components.database.details.schemaVersion").value("1"))
+                .andExpect(jsonPath("$.components.database.details.schemaVersion").value("2"))
                 .andExpect(jsonPath("$.components.storage.status").value(Matchers.oneOf("UP", "WARN")))
                 .andExpect(jsonPath("$.components.storage.details.writable").value(true))
                 .andExpect(jsonPath("$.components.aiService.status").value("DOWN"));

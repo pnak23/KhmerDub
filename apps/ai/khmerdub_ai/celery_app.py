@@ -12,7 +12,7 @@ app = Celery(
     "khmerdub_ai",
     broker=settings.redis_url,
     backend=settings.redis_url,
-    include=["khmerdub_ai.tasks.system"],
+    include=["khmerdub_ai.tasks.system", "khmerdub_ai.tasks.attempts"],
 )
 
 app.conf.update(
@@ -25,7 +25,10 @@ app.conf.update(
     task_acks_late=True,
     task_reject_on_worker_lost=True,
     worker_prefetch_multiplier=1,
-    worker_cancel_long_running_tasks_on_connection_loss=True,
+    # Keep running work when the Redis connection drops. (True would kill every running task on a Redis
+    # restart - measured in scenario S6.) Duplicates are harmless here: Spring fences every attempt, so a
+    # message redelivered later is rejected at claim time with 409.
+    worker_cancel_long_running_tasks_on_connection_loss=False,
     task_track_started=True,
     broker_connection_retry_on_startup=True,
     broker_transport_options={"visibility_timeout": settings.celery_visibility_timeout_s},

@@ -5,11 +5,13 @@ from __future__ import annotations
 import hmac
 import json
 import time
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
+from uuid import UUID
 
 import redis
 from celery.exceptions import TimeoutError as CeleryTimeoutError
 from fastapi import Depends, FastAPI, Header, HTTPException
+from pydantic import BaseModel, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from khmerdub_ai import __version__, health
@@ -63,6 +65,27 @@ def get_health(
         "cloudEnabled": settings.cloud_enabled,
         "components": components,
     }
+
+
+class DispatchRequest(BaseModel):
+    attemptId: UUID  # noqa: N815 - matches the Spring payload
+    stage: str = Field(min_length=1, max_length=40)
+    queue: Literal["cpu", "io"] = "cpu"
+
+
+@app.post("/internal/tasks/dispatch", status_code=202, dependencies=[Depends(require_internal_token)])
+def dispatch(request: DispatchRequest) -> dict[str, Any]:
+    """Queue one attempt. The Celery task id is the attempt id (the fencing token). Spring has already
+    committed the attempt; if this call fails, Spring releases the chunk and dispatches again later."""
+    try:
+        celery_app.send_task("khmerdub.attempt.run",
+                             kwargs={"attemptId": str(request.attemptId), "stage": request.stage},
+                             task_id=str(request.attemptId), queue=request.queue,
+                             retry=True, retry_policy={"max_retries": 2, "interval_start": 0,
+                                                       "interval_step": 0.5, "interval_max": 1})
+    except Exception as e:  # noqa: BLE001 - broker unreachable
+        raise HTTPException(status_code=503, detail=f"Queue unavailable: {type(e).__name__}") from e
+    return {"queued": True, "attemptId": str(request.attemptId)}
 
 
 @app.post("/internal/diagnostics/roundtrip", dependencies=[Depends(require_internal_token)])

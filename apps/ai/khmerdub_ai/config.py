@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     celery_visibility_timeout_s: int = Field(7200, validation_alias="CELERY_VISIBILITY_TIMEOUT_S")
     worker_heartbeat_interval_s: int = Field(10, validation_alias="WORKER_HEARTBEAT_INTERVAL_S")
     min_free_disk_gb: int = Field(30, validation_alias="KHMERDUB_MIN_FREE_DISK_GB")
+    # Test-only fault injection (temp/diagnostics/faults.json). Off unless explicitly enabled.
+    diagnostics_enabled: bool = Field(False, validation_alias="KHMERDUB_DIAGNOSTICS")
 
     @field_validator("ffmpeg_dir", mode="before")
     @classmethod

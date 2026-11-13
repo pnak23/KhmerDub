@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { formatBytes, fromNow, statusLabel, statusVariant } from '~/utils/format'
+import { formatBytes, formatDuration, fromNow, humanize, jobVariant, statusLabel, statusVariant } from '~/utils/format'
+
+describe('formatDuration / jobVariant / humanize', () => {
+  it('formats movie durations', () => {
+    expect(formatDuration(65_000)).toBe('1:05')
+    expect(formatDuration(10_800_000)).toBe('3:00:00')
+    expect(formatDuration(5_025_400)).toBe('1:23:45')
+    expect(formatDuration(null)).toBe('—')
+  })
+  it('maps job states to colours and labels', () => {
+    expect(jobVariant('FAILED')).toBe('danger')
+    expect(jobVariant('PAUSED')).toBe('warning')
+    expect(jobVariant('QUEUED')).toBe('secondary')
+    expect(humanize('EXTRACT_AUDIO')).toBe('Extract audio')
+  })
+})
 
 describe('statusVariant / statusLabel', () => {
   it('maps health states to Bootstrap variants and labels', () => {

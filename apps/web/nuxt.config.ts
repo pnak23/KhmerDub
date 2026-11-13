@@ -29,6 +29,8 @@ export default defineNuxtConfig({
       appVersion: '0.1.0',
       // The browser connects to the STOMP endpoint directly; Spring Boot checks the Origin.
       wsUrl: `ws://127.0.0.1:${apiPort}/ws`,
+      // Movie uploads go straight to Spring Boot (CORS is enabled for that one endpoint only).
+      apiDirectUrl: `http://127.0.0.1:${apiPort}`,
     },
   },
 

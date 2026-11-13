@@ -109,6 +109,8 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
+                    <!-- Small heap on purpose: the upload test streams 1.5 GB and would fail if it were buffered. -->
+                    <argLine>-Xmx512m</argLine>
                     <systemPropertyVariables>
                         <!-- Tests must never read the developer's real .env -->
                         <KHMERDUB_ENV_FILE>does-not-exist.env</KHMERDUB_ENV_FILE>

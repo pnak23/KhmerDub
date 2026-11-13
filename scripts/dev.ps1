@@ -20,6 +20,8 @@
 param(
     [Parameter(Mandatory, Position = 0)][ValidateSet('start', 'stop', 'status')][string]$Command,
     [ValidateSet('linux', 'windows', 'none')][string]$Worker = 'linux',
+    # Start/stop only one part of the stack (e.g. restart just the API). Default: everything.
+    [ValidateSet('all', 'api', 'ai', 'web', 'worker')][string]$Service = 'all',
     [switch]$All
 )
 
@@ -116,20 +118,29 @@ switch ($Command) {
         Write-Host 'Services:'
         $env:JAVA_HOME = $JavaHome
         $env:PATH = "$JavaHome\bin;$env:PATH"
-        foreach ($name in 'api', 'ai', 'web') { Start-AppService $name }
-        switch ($Worker) {
-            'linux' { Invoke-Docker @('up', '-d', 'worker-cpu') }
-            'windows' { Start-AppService 'worker-win' }
-            'none' { Write-Host '  no worker started' }
+        foreach ($name in 'api', 'ai', 'web') {
+            if ($Service -in 'all', $name) { Start-AppService $name }
         }
-        Wait-Port 'ai' $Services.ai.Port 30
-        Wait-Port 'web' $Services.web.Port 90
-        Wait-Port 'api' $Services.api.Port 180
+        if ($Service -in 'all', 'worker') {
+            switch ($Worker) {
+                'linux' { Invoke-Docker @('up', '-d', 'worker-cpu') }
+                'windows' { Start-AppService 'worker-win' }
+                'none' { Write-Host '  no worker started' }
+            }
+        }
+        if ($Service -in 'all', 'ai') { Wait-Port 'ai' $Services.ai.Port 30 }
+        if ($Service -in 'all', 'web') { Wait-Port 'web' $Services.web.Port 90 }
+        if ($Service -in 'all', 'api') { Wait-Port 'api' $Services.api.Port 180 }
         Write-Host "Open http://localhost:$($Cfg['WEB_PORT'])  (logs: $LogDir)"
     }
     'stop' {
-        foreach ($name in 'web', 'api', 'ai', 'worker-win') { Stop-AppService $name }
-        Invoke-Docker @('stop', 'worker-cpu')
+        foreach ($name in 'web', 'api', 'ai') {
+            if ($Service -in 'all', $name) { Stop-AppService $name }
+        }
+        if ($Service -in 'all', 'worker') {
+            Stop-AppService 'worker-win'
+            Invoke-Docker @('stop', 'worker-cpu')
+        }
         if ($All) { Invoke-Docker @('stop') }
     }
     'status' {

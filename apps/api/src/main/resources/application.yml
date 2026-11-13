@@ -72,3 +72,17 @@ khmerdub:
     connect-timeout: 2s
     read-timeout: 5s
   health-broadcast-interval-ms: 15000
+  # Job engine (M2). Spring owns leases; Redis is only the queue.
+  jobs:
+    heartbeat-interval: 10s     # workers renew their lease this often
+    lease: 60s                  # no heartbeat for this long -> attempt LOST -> chunk reassigned
+    claim-timeout: 120s         # dispatched but never claimed -> LOST (does not use up an attempt)
+    startup-grace: 90s          # after an API restart, running leases are extended by this much
+    dispatch-backoff: 30s       # wait before re-dispatching after an infrastructure loss
+    cpu-slots: 1                # concurrent CPU-queue tasks (= Linux worker concurrency)
+    max-attempts: 3             # per chunk, counting only real failures
+    work-retention: 24h         # attempt scratch folders are removed this long after the attempt ends
+    scheduler-enabled: true
+  upload:
+    max-size: 20GB
+    headroom: 2GB
