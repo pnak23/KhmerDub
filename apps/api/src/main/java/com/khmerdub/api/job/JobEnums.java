@@ -13,7 +13,9 @@ public final class JobEnums {
     public enum JobType {
         IMPORT(false, List.of(Stage.INSPECT_MEDIA)),
         EXTRACT_AUDIO(true, List.of(Stage.EXTRACT_AUDIO, Stage.MERGE_AUDIO)),
-        TRANSCRIBE(true, List.of()),
+        /** Speech map, language, transcription, speaker identification, cross-chunk speakers, dialogue (M3b). */
+        TRANSCRIBE(true, List.of(Stage.SPEECH_MAP, Stage.DETECT_LANGUAGE, Stage.TRANSCRIBE, Stage.DIARIZE,
+                Stage.RECONCILE_SPEAKERS, Stage.BUILD_DIALOGUE)),
         TRANSLATE(true, List.of()),
         GENERATE_AUDIO(true, List.of()),
         REGENERATE_CLIPS(false, List.of()),
@@ -46,8 +48,8 @@ public final class JobEnums {
     }
 
     public enum Stage {
-        INSPECT_MEDIA, EXTRACT_AUDIO, MERGE_AUDIO, DETECT_LANGUAGE, TRANSCRIBE, DIARIZE, RECONCILE_SPEAKERS, TRANSLATE,
-        TTS, ASSEMBLE, MIX, SUBTITLE, EXPORT, VALIDATE
+        INSPECT_MEDIA, EXTRACT_AUDIO, MERGE_AUDIO, SPEECH_MAP, DETECT_LANGUAGE, TRANSCRIBE, DIARIZE, RECONCILE_SPEAKERS,
+        BUILD_DIALOGUE, TRANSLATE, TTS, ASSEMBLE, MIX, SUBTITLE, EXPORT, VALIDATE
     }
 
     public enum ChunkStatus {

@@ -1,0 +1,10 @@
+# Pinned M3a benchmark dependencies (each release >= 14 days old at pinning time, 2026-11-13).
+faster-whisper==1.2.1
+ctranslate2==4.8.4
+onnxruntime==1.31.1
+av==19.0.2
+tokenizers==0.23.3
+huggingface-hub==2.3.0
+pyannote.audio==4.0.7
+torchcodec==0.17.0
+scikit-learn==1.9.1

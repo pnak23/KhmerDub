@@ -136,6 +136,8 @@ public class ProcessingChunk {
     public void setCurrentAttemptId(UUID currentAttemptId) { this.currentAttemptId = currentAttemptId; }
     public String getQueue() { return queue; }
     public Map<String, Object> getParams() { return params; }
+    /** Replace the params (a new map, so the JSON column is reliably marked dirty). */
+    public void setParams(Map<String, Object> params) { this.params = new HashMap<>(params); }
     public double getProgress() { return progress.doubleValue(); }
     public void setProgress(double value) {
         this.progress = BigDecimal.valueOf(Math.max(0, Math.min(100, value))).setScale(2, RoundingMode.HALF_UP);

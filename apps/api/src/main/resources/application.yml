@@ -72,6 +72,17 @@ khmerdub:
     connect-timeout: 2s
     read-timeout: 5s
   health-broadcast-interval-ms: 15000
+  # Keep-awake (M3b). The Windows AI service holds ES_SYSTEM_REQUIRED only while Spring renews it, and Spring renews
+  # only while a heavy job is actively processing (exact rules: KeepAwakePolicy). The display still turns off.
+  power:
+    enabled: true
+    renew-interval: 30s       # renewal while holding (decisions are re-evaluated every 5 s)
+    ttl: 120s                 # Windows drops the request if Spring stops renewing it
+    recovery-margin: 120s     # worker silent: lease (60 s) + this margin -> release
+    stall-limit: 30m          # RUNNING but no progress for this long -> release
+    pausing-max: 20m          # longest hold while a pause waits for the running chunk
+    cancelling-max: 3m        # longest hold while a cancellation finishes
+    max-hold: 24h             # absolute limit per run
   # Job engine (M2). Spring owns leases; Redis is only the queue.
   jobs:
     heartbeat-interval: 10s     # workers renew their lease this often

@@ -184,8 +184,11 @@ def worker_pids() -> tuple[int, list[int]]:
 
 
 def kill_in_worker(pid: int) -> None:
-    subprocess.run(["docker", "exec", WORKER, "python", "-c", f"import os,signal; os.kill({pid}, signal.SIGKILL)"],
-                   check=True)
+    """SIGKILL a process inside the worker container. Killing the container's main process stops the container,
+    and Docker then kills this exec session too: exit status 137 is the expected outcome in that case."""
+    r = subprocess.run(["docker", "exec", WORKER, "python", "-c", f"import os,signal; os.kill({pid}, signal.SIGKILL)"])
+    if r.returncode not in (0, 137):
+        raise subprocess.CalledProcessError(r.returncode, r.args)
 
 
 def dev(*args: str, diagnostics: bool | None = None) -> None:

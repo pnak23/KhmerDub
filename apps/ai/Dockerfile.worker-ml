@@ -1,0 +1,45 @@
+# KhmerDub Celery worker with the M3 speech stack (CPU only). Runs on Docker Desktop's WSL2 VM.
+# Media and models stay on Windows (bind-mounted at /data; models read-only). The runtime is OFFLINE:
+# compose sets HF_HUB_OFFLINE=1 and the worker sits on an internal network without internet access.
+#
+# The first layers are identical to the M3a benchmark image (khmerdub-ml:m3a) so the verified torch/ML layers
+# are reused from the build cache. Do not reorder them.
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    HF_HUB_DISABLE_TELEMETRY=1 \
+    PYANNOTE_METRICS_ENABLED=0
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg tini \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd --create-home --uid 1000 worker
+
+# CPU-only PyTorch first, from the official CPU index (the PyPI build pulls several GB of CUDA libraries).
+RUN pip install --index-url https://download.pytorch.org/whl/cpu torch==2.15.0+cpu torchaudio==2.11.0+cpu
+
+COPY requirements-ml.txt /tmp/requirements-ml.txt
+RUN pip install -r /tmp/requirements-ml.txt && pip freeze > /opt/ml-lock.txt
+
+# ---- worker layers (M2 runtime dependencies on top of the ML stack) ----
+# celery pins python-dateutil==2.9.0.post0; pandas/matplotlib accept it (>=2.9.0 / >=2.7). pip check must pass.
+COPY requirements.lock.txt /tmp/requirements.lock.txt
+RUN pip install -r /tmp/requirements.lock.txt \
+    && pip check \
+    && pip freeze > /opt/worker-ml-lock.txt
+
+ENV PYTHONPATH=/app \
+    KHMERDUB_MODELS_DIR=/data/models
+WORKDIR /app
+
+# Baked-in copy of the code; in dev it is overridden by a read-only bind mount.
+COPY khmerdub_ai ./khmerdub_ai
+
+USER worker
+# tini as PID 1: forwards SIGTERM to Celery (warm shutdown) and reaps child processes.
+ENTRYPOINT ["tini", "--"]
+CMD ["celery", "-A", "khmerdub_ai.celery_app", "worker", "-Q", "cpu", "-c", "1", "-n", "cpu@%h", "--loglevel=INFO"]

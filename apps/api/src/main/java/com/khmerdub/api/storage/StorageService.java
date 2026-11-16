@@ -156,6 +156,57 @@ public class StorageService {
         return !Files.exists(dir);
     }
 
+    /** Private (biometric-like) data of a project: speaker embeddings and voice samples, in separate folders. */
+    public static String privateDir(UUID projectId, String kind) {
+        if (!kind.equals("fingerprints") && !kind.equals("voice-samples")) {
+            throw new IllegalArgumentException("Unknown private folder " + kind);
+        }
+        return projectDir(projectId) + "/private/" + kind;
+    }
+
+    /**
+     * Delete everything under {@code path} (a file or folder) and verify nothing is left.
+     * Files are deleted (not moved to a recycle bin). Returns {files deleted, bytes deleted, files remaining}.
+     */
+    public long[] deleteTree(Path path) throws IOException {
+        long files = 0;
+        long bytes = 0;
+        if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
+            try (Stream<Path> walk = Files.walk(path)) {
+                for (Path p : walk.sorted((a, b) -> b.getNameCount() - a.getNameCount()).toList()) {
+                    boolean regular = Files.isRegularFile(p, LinkOption.NOFOLLOW_LINKS);
+                    long size = regular ? Files.size(p) : 0;
+                    if (regular) {
+                        // Originals are read-only; private data is not, but clear the flag defensively.
+                        p.toFile().setWritable(true, false);
+                    }
+                    try {
+                        Files.delete(p);
+                        if (regular) {
+                            files++;
+                            bytes += size;
+                        }
+                    } catch (DirectoryNotEmptyException ignored) {
+                        // something inside could not be deleted; counted below
+                    }
+                }
+            }
+        }
+        long remaining = 0;
+        if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
+            try (Stream<Path> walk = Files.walk(path)) {
+                remaining = walk.filter(p -> Files.isRegularFile(p, LinkOption.NOFOLLOW_LINKS)).count();
+            }
+        }
+        return new long[] {files, bytes, remaining};
+    }
+
+    /** Remove an attempt's private outputs (embeddings, voice samples) as soon as the attempt has ended. */
+    public long purgeAttemptPrivate(UUID projectId, UUID attemptId) throws IOException {
+        Path dir = resolve(attemptWorkDir(projectId, attemptId) + "/private");
+        return deleteTree(dir)[0];
+    }
+
     public static final class UnsafePathException extends IllegalArgumentException {
         public UnsafePathException(String path) {
             super("Unsafe storage path: " + path);

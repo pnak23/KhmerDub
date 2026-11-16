@@ -1,0 +1,144 @@
+{
+  "mobiuslabsgmbh/faster-whisper-large-v3-turbo": {
+    "revision": "0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf",
+    "license": "mit",
+    "gated": false,
+    "lastModified": "2025-11-05T12:55:33.000Z",
+    "totalBytes": 1621668947,
+    "files": [
+      {
+        "path": ".gitattributes",
+        "size": 1519,
+        "git_oid": "a6344aac8c09253b3b630fb776ae94478aa0275b"
+      },
+      {
+        "path": "README.md",
+        "size": 1445,
+        "git_oid": "284b65fb822d8d95331b288fc2af14bc28ce3db7"
+      },
+      {
+        "path": "config.json",
+        "size": 2263,
+        "git_oid": "0351d1d6870005e865747b781b5d7c23ea0459cd"
+      },
+      {
+        "path": "model.bin",
+        "size": 1617884929,
+        "sha256": "e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da"
+      },
+      {
+        "path": "preprocessor_config.json",
+        "size": 340,
+        "git_oid": "931c77a740890c46365c7ae0c9d350ba3cca908f"
+      },
+      {
+        "path": "tokenizer.json",
+        "size": 2710337,
+        "git_oid": "17456db595adc78a973f97d69d8cb50bc87c0b1c"
+      },
+      {
+        "path": "vocabulary.json",
+        "size": 1068114,
+        "git_oid": "0adcd01e7c237205d593b707e66dd5d7bc785d2d"
+      }
+    ]
+  },
+  "Systran/faster-whisper-small": {
+    "revision": "536b0662742c02347bc0e980a01041f333bce120",
+    "license": "mit",
+    "gated": false,
+    "lastModified": "2023-11-23T10:57:09.000Z",
+    "totalBytes": 486215847,
+    "files": [
+      {
+        "path": ".gitattributes",
+        "size": 1477,
+        "git_oid": "c7d9f3332a950355d5a77d85000f05e6f45435ea"
+      },
+      {
+        "path": "README.md",
+        "size": 1998,
+        "git_oid": "16511f6106ead2fbc3a1480957a217c2661a5a98"
+      },
+      {
+        "path": "config.json",
+        "size": 2370,
+        "git_oid": "e5047537059bd8f182d9ca64c470201585015187"
+      },
+      {
+        "path": "model.bin",
+        "size": 483546902,
+        "sha256": "3e305921506d8872816023e4c273e75d2419fb89b24da97b4fe7bce14170d671"
+      },
+      {
+        "path": "tokenizer.json",
+        "size": 2203239,
+        "git_oid": "7818adb6de9fa3064d3ff81226fdd675be1f6344"
+      },
+      {
+        "path": "vocabulary.txt",
+        "size": 459861,
+        "git_oid": "c9074644d9d1205686f16d411564729461324b75"
+      }
+    ]
+  },
+  "pyannote/speaker-diarization-community-1": {
+    "revision": "3533c8cf8e369892e6b79ff1bf80f7b0286a54ee",
+    "license": "cc-by-4.0",
+    "gated": "auto",
+    "lastModified": "2025-09-29T08:43:24.000Z",
+    "totalBytes": 33695573,
+    "files": [
+      {
+        "path": ".gitattributes",
+        "size": 1571,
+        "git_oid": "7c39301dc01fe65e09b2432a27a18b4ee3e74a37"
+      },
+      {
+        "path": "README.md",
+        "size": 9978,
+        "git_oid": "8356d6634d7b1074581dd36e2225887ec809326e"
+      },
+      {
+        "path": "config.yaml",
+        "size": 444,
+        "git_oid": "4022db43960736338378fdb6b5a85cfdae198910"
+      },
+      {
+        "path": "diarization.gif",
+        "size": 861445,
+        "sha256": "0d925ad38995d89009260e493b0ae2e684c3e1397f495265ed841c45c4f73a35"
+      },
+      {
+        "path": "embedding/README.md",
+        "size": 938,
+        "git_oid": "d71f943e00016652680bef1e6c49fbc842e0d4c4"
+      },
+      {
+        "path": "embedding/pytorch_model.bin",
+        "size": 26646242,
+        "sha256": "6f10ff60898a1d185fa22e1d11e0bfa8a92efec811f11bca48cb8cafebefd929"
+      },
+      {
+        "path": "plda/README.md",
+        "size": 220,
+        "git_oid": "5c01ad2e673203fe32a82d7a140eb817db9930b7"
+      },
+      {
+        "path": "plda/plda.npz",
+        "size": 133852,
+        "sha256": "9b77bcd840692710dd3496f62ecfeed8d8e5f002fd991b785079b244eab7d255"
+      },
+      {
+        "path": "plda/xvec_transform.npz",
+        "size": 134376,
+        "sha256": "325f1ce8e48f7e55e9c8aa47e05d2766b7c48c4b25b8de8dd751e7a4cc5fbe8f"
+      },
+      {
+        "path": "segmentation/pytorch_model.bin",
+        "size": 5906507,
+        "sha256": "7ad24338d844fb95985486eb1a464e32d229f6d7a03c9abe60f978bacf3f816e"
+      }
+    ]
+  }
+}

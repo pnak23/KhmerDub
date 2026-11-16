@@ -29,9 +29,13 @@ class SpringUnavailable(Exception):
 
 
 class SpringClient:
-    def __init__(self, base_url: str, token: str, *, transport: httpx.BaseTransport | None = None,
+    def __init__(self, base_url: str, token: str, *, host_header: str | None = None,
+                 transport: httpx.BaseTransport | None = None,
                  sleep: Callable[[float], None] = time.sleep, clock: Callable[[], float] = time.monotonic):
-        self._http = httpx.Client(base_url=base_url, headers={"X-Internal-Token": token},
+        headers = {"X-Internal-Token": token}
+        if host_header:
+            headers["Host"] = host_header  # reaching Spring through the fixed relay (isolated worker network)
+        self._http = httpx.Client(base_url=base_url, headers=headers,
                                   timeout=httpx.Timeout(30.0, connect=5.0), transport=transport)
         self._sleep = sleep
         self._clock = clock

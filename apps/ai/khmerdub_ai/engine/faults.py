@@ -21,6 +21,8 @@ class Fault:
     sleep_before_s: float = 0
     suppress_heartbeat: bool = False
     sleep_before_complete_s: float = 0
+    # "invalid" = non-retryable failure (fails the job at once); "error" = retryable failure.
+    fail: str | None = None
 
 
 def load_rules(storage_root: Path) -> list[dict[str, Any]]:
@@ -45,5 +47,6 @@ def match(rules: list[dict[str, Any]], claim: dict[str, Any]) -> Fault | None:
             continue
         return Fault(sleep_before_s=float(r.get("sleepBeforeS", 0)),
                      suppress_heartbeat=bool(r.get("suppressHeartbeat", False)),
-                     sleep_before_complete_s=float(r.get("sleepBeforeCompleteS", 0)))
+                     sleep_before_complete_s=float(r.get("sleepBeforeCompleteS", 0)),
+                     fail=r.get("fail") if r.get("fail") in ("invalid", "error") else None)
     return None

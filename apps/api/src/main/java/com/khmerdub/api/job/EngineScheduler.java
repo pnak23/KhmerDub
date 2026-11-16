@@ -3,6 +3,7 @@ package com.khmerdub.api.job;
 import com.khmerdub.api.config.KhmerDubProperties;
 import com.khmerdub.api.job.JobEngine.DispatchOrder;
 import com.khmerdub.api.job.JobEnums.AttemptStatus;
+import com.khmerdub.api.privacy.PrivacyService;
 import com.khmerdub.api.storage.StorageService;
 import java.io.IOException;
 import java.time.Clock;
@@ -34,11 +35,13 @@ public class EngineScheduler {
     private final RestClient aiService;
     private final KhmerDubProperties.Jobs config;
     private final Clock clock;
+    private final PrivacyService privacy;
     private final AtomicBoolean graceApplied = new AtomicBoolean(false);
 
     public EngineScheduler(JobEngine engine, AttemptRepository attempts, ChunkRepository chunks, JobRepository jobs,
                            StorageService storage, RestClient aiServiceRestClient, KhmerDubProperties props,
-                           Clock clock) {
+                           Clock clock, PrivacyService privacy) {
+        this.privacy = privacy;
         this.engine = engine;
         this.attempts = attempts;
         this.chunks = chunks;
@@ -89,6 +92,18 @@ public class EngineScheduler {
             } catch (RuntimeException e) {
                 log.warn("Could not expire attempt {}: {}", attemptId, e.toString());
             }
+        }
+    }
+
+    /** Private outputs of ended attempts (late writes by lost workers) are removed within a minute. */
+    @Scheduled(initialDelay = 30_000, fixedDelay = 60_000)
+    public void privateSweepTick() {
+        if (!config.schedulerEnabled()) {
+            return;
+        }
+        long removed = privacy.sweepEndedAttempts();
+        if (removed > 0) {
+            log.info("Private sweep removed {} file(s) left by ended attempts", removed);
         }
     }
 

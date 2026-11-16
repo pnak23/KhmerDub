@@ -34,7 +34,12 @@ class Settings(BaseSettings):
     redis_port: int = Field(6380, validation_alias="REDIS_PORT")
     api_host: str = Field("127.0.0.1", validation_alias="API_HOST")
     api_port: int = Field(8180, validation_alias="API_PORT")
+    # Host header for calls to Spring. The isolated worker reaches Spring through the fixed relay ("api-relay")
+    # but must present the host name Spring allows on /internal/** (host.docker.internal).
+    api_host_header: str | None = Field(None, validation_alias="API_HOST_HEADER")
     ai_port: int = Field(8765, validation_alias="AI_PORT")
+    # Verified models (read-only in the worker). Only repos listed in manifest.verified.json are used.
+    models_dir: Path = Field(Path("D:/KhmerDub/data/models"), validation_alias="KHMERDUB_MODELS_DIR")
 
     # Must exceed the longest single task. Otherwise Redis re-delivers a task that is still running.
     celery_visibility_timeout_s: int = Field(7200, validation_alias="CELERY_VISIBILITY_TIMEOUT_S")
@@ -43,7 +48,7 @@ class Settings(BaseSettings):
     # Test-only fault injection (temp/diagnostics/faults.json). Off unless explicitly enabled.
     diagnostics_enabled: bool = Field(False, validation_alias="KHMERDUB_DIAGNOSTICS")
 
-    @field_validator("ffmpeg_dir", mode="before")
+    @field_validator("ffmpeg_dir", "api_host_header", mode="before")
     @classmethod
     def _empty_is_none(cls, v: object) -> object:
         return None if v in ("", None) else v

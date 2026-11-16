@@ -26,6 +26,17 @@ const languageCode = z.string().regex(/^(auto|[a-z]{2,3}(-[A-Za-z]{2,4})?)$/, 'C
 
 export const projectNameSchema = z.string().trim().min(1, 'Enter a project name').max(200, 'At most 200 characters')
 
+/** Start transcription + speaker identification (M3b). Quality is the default; Fast trades speaker separation for speed. */
+export const transcriptionSchema = z.object({
+  mode: z.enum(['QUALITY', 'FAST'], { message: 'Choose Quality or Fast' }),
+  language: z.string().regex(/^(auto|[a-z]{2,3})$/, 'Choose a language'),
+})
+
+/** The API refused because the project already has dialogue: the user must confirm (a verified backup is made). */
+export function needsReprocessConfirmation(code: string | undefined): boolean {
+  return code === 'REPROCESS_CONFIRMATION_REQUIRED'
+}
+
 /** The movie file: type, emptiness and size are checked before anything is uploaded. */
 export function movieFileSchema(maxUploadBytes: number) {
   return z.instanceof(File, { message: 'Choose a movie file' })

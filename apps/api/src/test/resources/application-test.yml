@@ -12,3 +12,6 @@ khmerdub:
   jobs:
     # Tests drive the engine step by step instead of relying on timers.
     scheduler-enabled: false
+  power:
+    # The AI service is unreachable in tests; PowerKeeper is exercised directly where needed.
+    enabled: false

@@ -34,7 +34,13 @@ public class AssetController {
 
     @GetMapping("/assets/{id}")
     public AssetView get(@PathVariable UUID id) {
-        return AssetView.of(assets.findById(id).orElseThrow(() -> ApiException.notFound("Asset")));
+        return AssetView.of(exposable(id));
+    }
+
+    /** Speaker embeddings are never served or described: they answer exactly like a missing asset. */
+    private MediaAsset exposable(UUID id) {
+        return assets.findById(id).filter(a -> a.getType().exposable())
+                .orElseThrow(() -> ApiException.notFound("Asset"));
     }
 
     /**
@@ -43,7 +49,7 @@ public class AssetController {
      */
     @GetMapping("/assets/{id}/content")
     public ResponseEntity<Resource> content(@PathVariable UUID id) {
-        MediaAsset asset = assets.findById(id).orElseThrow(() -> ApiException.notFound("Asset"));
+        MediaAsset asset = exposable(id);
         Path file = storage.resolve(asset.getStoragePath());
         if (!Files.isRegularFile(file)) {
             throw ApiException.notFound("File of asset");
