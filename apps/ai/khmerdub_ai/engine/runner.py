@@ -215,6 +215,10 @@ def execute_attempt(attempt_id: str, *, client: SpringClient, storage_root: Path
             log.warning("Diagnostics: injecting %s into attempt %s", injected, attempt_id)
             hb.suppressed = injected.suppress_heartbeat
             ctx.sleep(injected.sleep_before_s)
+            if injected.fail == "invalid":
+                raise InvalidInput("Diagnostics: injected non-retryable failure")
+            if injected.fail == "error":
+                raise RuntimeError("Diagnostics: injected retryable failure")
         handler = handlers.get(claim["stage"])
         if handler is None:
             raise InvalidInput(f"This worker cannot run stage {claim['stage']}")

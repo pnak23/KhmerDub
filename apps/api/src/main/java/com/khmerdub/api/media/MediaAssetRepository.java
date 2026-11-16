@@ -10,4 +10,6 @@ public interface MediaAssetRepository extends JpaRepository<MediaAsset, UUID> {
     Optional<MediaAsset> findFirstByProjectIdAndType(UUID projectId, MediaAssetType type);
 
     List<MediaAsset> findByProjectIdOrderByCreatedAtAsc(UUID projectId);
+
+    List<MediaAsset> findByProjectIdAndTypeOrderByCreatedAtAsc(UUID projectId, MediaAssetType type);
 }

@@ -20,6 +20,7 @@ import com.khmerdub.api.job.WorkerProtocol.FailRequest;
 import com.khmerdub.api.job.WorkerProtocol.HeartbeatResponse;
 import com.khmerdub.api.storage.StorageService;
 import jakarta.persistence.EntityManager;
+import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -60,10 +61,11 @@ public class JobEngine {
     private final ApplicationEventPublisher publisher;
     private final EntityManager em;
     private final Clock clock;
+    private final StorageService storage;
 
     public JobEngine(JobRepository jobs, ChunkRepository chunks, AttemptRepository attempts,
                      JobEventRepository events, StagePlanner planner, KhmerDubProperties props,
-                     ApplicationEventPublisher publisher, EntityManager em, Clock clock) {
+                     ApplicationEventPublisher publisher, EntityManager em, Clock clock, StorageService storage) {
         this.jobs = jobs;
         this.chunks = chunks;
         this.attempts = attempts;
@@ -73,6 +75,7 @@ public class JobEngine {
         this.publisher = publisher;
         this.em = em;
         this.clock = clock;
+        this.storage = storage;
     }
 
     /** Published after commit so the UI can refresh (see JobPublisher). */
@@ -211,6 +214,7 @@ public class JobEngine {
         attempt.setWorker(worker);
         attempt.setClaimedAt(now);
         attempt.setLastHeartbeatAt(now);
+        attempt.reportProgress(0, now);
         attempt.setLeaseExpiresAt(now.plus(config.lease()));
         chunk.setStatus(ChunkStatus.RUNNING);
         event(job, chunk, attempt, "ATTEMPT_STARTED", JobEvent.Level.INFO,
@@ -232,7 +236,7 @@ public class JobEngine {
         OffsetDateTime now = now();
         x.attempt().setLastHeartbeatAt(now);
         x.attempt().setLeaseExpiresAt(now.plus(config.lease()));
-        x.attempt().setProgress(progress);
+        x.attempt().reportProgress(progress, now);
         x.chunk().setProgress(progress);
         recomputeProgress(x.job());
         changed(x.job());
@@ -281,6 +285,7 @@ public class JobEngine {
         event(job, chunk, attempt, "CHUNK_COMPLETED", JobEvent.Level.INFO,
                 "%s #%d completed (attempt %d)".formatted(chunk.getStage(), chunk.getChunkIndex(), attempt.getAttemptNo()),
                 attempt.getMetrics());
+        purgePrivate(job, attempt.getId());
         if (cannotContinue != null) {
             failJob(job, cannotContinue);
         }
@@ -505,6 +510,19 @@ public class JobEngine {
         if (ChunkStatus.LIVE.contains(x.chunk().getStatus())) {
             x.chunk().setStatus(status == AttemptStatus.CANCELLED ? ChunkStatus.CANCELLED : ChunkStatus.PENDING);
         }
+        purgePrivate(x.job(), x.attempt().getId());
+    }
+
+    /**
+     * Private outputs (speaker embeddings, voice samples) of an ended attempt are removed at once instead of waiting
+     * for the scratch-folder retention. A late write by a lost worker is caught by the scheduler's private sweep.
+     */
+    private void purgePrivate(ProcessingJob job, UUID attemptId) {
+        try {
+            storage.purgeAttemptPrivate(job.getProjectId(), attemptId);
+        } catch (IOException | RuntimeException e) {
+            log.warn("Private outputs of attempt {} not removed yet: {}", attemptId, e.getClass().getSimpleName());
+        }
     }
 
     private void failJob(ProcessingJob job, String message) {
@@ -515,7 +533,10 @@ public class JobEngine {
         for (ProcessingChunk c : chunks.findByJobId(job.getId())) {
             if (ChunkStatus.LIVE.contains(c.getStatus()) && c.getCurrentAttemptId() != null) {
                 attempts.findById(c.getCurrentAttemptId()).filter(a -> a.getStatus().live())
-                        .ifPresent(a -> a.end(AttemptStatus.CANCELLED, EndReason.JOB_FAILED, "Job failed", now()));
+                        .ifPresent(a -> {
+                            a.end(AttemptStatus.CANCELLED, EndReason.JOB_FAILED, "Job failed", now());
+                            purgePrivate(job, a.getId());
+                        });
                 c.setStatus(ChunkStatus.PENDING);
             }
         }
@@ -584,6 +605,9 @@ public class JobEngine {
             List<ProcessingChunk> planned = planner.plan(job, stage);
             event(job, null, null, "STAGE_STARTED", JobEvent.Level.INFO,
                     "%s: %d chunk(s)".formatted(stage, planned.size()), Map.of("chunks", planned.size()));
+            if (!planned.isEmpty() && planned.stream().allMatch(c -> c.getStatus().done())) {
+                advance(job); // e.g. speaker identification switched off: the stage is planned as SKIPPED
+            }
         } catch (PlanningException e) {
             failJob(job, "Cannot start %s: %s".formatted(stage, e.getMessage()));
         }
@@ -594,7 +618,7 @@ public class JobEngine {
             job.setProgress(100);
             return;
         }
-        Map<Stage, Double> weights = planner.stageWeights(job.getType());
+        Map<Stage, Double> weights = planner.stageWeights(job);
         Map<Stage, double[]> perStage = new HashMap<>(); // [weighted progress, total weight]
         for (ProcessingChunk c : chunks.findByJobId(job.getId())) {
             double p = c.getStatus().done() ? 100 : c.getProgress();

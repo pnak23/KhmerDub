@@ -5,6 +5,8 @@ from __future__ import annotations
 import hmac
 import json
 import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
@@ -17,9 +19,22 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from khmerdub_ai import __version__, health
 from khmerdub_ai.celery_app import app as celery_app
 from khmerdub_ai.config import Settings, get_settings
+from khmerdub_ai.power import MAX_TTL_S, MIN_TTL_S, KeepAwake
 from khmerdub_ai.storage import resolve_in_storage
 
-app = FastAPI(title="KhmerDub AI service", version=__version__, docs_url=None, redoc_url=None, openapi_url=None)
+# Keep-awake lives in THIS (Windows) process only. Spring holds it while a heavy job is actively processing.
+keep_awake = KeepAwake()
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    yield
+    keep_awake.release(why="released at application exit")
+    keep_awake.stop()
+
+
+app = FastAPI(title="KhmerDub AI service", version=__version__, docs_url=None, redoc_url=None, openapi_url=None,
+              lifespan=lifespan)
 # DNS-rebinding guard: only loopback Host headers are accepted.
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])
 
@@ -86,6 +101,44 @@ def dispatch(request: DispatchRequest) -> dict[str, Any]:
     except Exception as e:  # noqa: BLE001 - broker unreachable
         raise HTTPException(status_code=503, detail=f"Queue unavailable: {type(e).__name__}") from e
     return {"queued": True, "attemptId": str(request.attemptId)}
+
+
+class PowerHoldRequest(BaseModel):
+    holder: str = Field(min_length=1, max_length=60)
+    ttlSeconds: int = Field(ge=MIN_TTL_S, le=MAX_TTL_S)  # noqa: N815 - matches the Spring payload
+    reason: str | None = Field(default=None, max_length=200)
+
+
+class PowerReleaseRequest(BaseModel):
+    holder: str = Field(min_length=1, max_length=60)
+    reason: str | None = Field(default=None, max_length=200)
+
+
+def _power_status() -> dict[str, Any]:
+    s = keep_awake.status()
+    return {"supported": s.supported, "held": s.held, "holder": s.holder, "reason": s.reason,
+            "heldSince": s.held_since, "expiresInSeconds": None if s.expires_in_s is None else round(s.expires_in_s, 1),
+            "acquisitions": s.acquisitions, "releases": s.releases}
+
+
+@app.post("/internal/power/hold", dependencies=[Depends(require_internal_token)])
+def power_hold(request: PowerHoldRequest) -> dict[str, Any]:
+    """Acquire or renew the keep-awake lease. Without renewal it is released when the TTL expires."""
+    keep_awake.hold(request.holder, request.ttlSeconds, request.reason)
+    keep_awake.wait_idle(0.5)
+    return _power_status()
+
+
+@app.post("/internal/power/release", dependencies=[Depends(require_internal_token)])
+def power_release(request: PowerReleaseRequest) -> dict[str, Any]:
+    keep_awake.release(request.holder, why=f"released by {request.holder}: {request.reason or 'no reason given'}")
+    keep_awake.wait_idle(0.5)
+    return _power_status()
+
+
+@app.get("/internal/power/status", dependencies=[Depends(require_internal_token)])
+def power_status() -> dict[str, Any]:
+    return _power_status()
 
 
 @app.post("/internal/diagnostics/roundtrip", dependencies=[Depends(require_internal_token)])

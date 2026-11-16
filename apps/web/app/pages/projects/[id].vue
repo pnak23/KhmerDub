@@ -18,6 +18,14 @@ const activeExtraction = computed(() => detail.value?.jobs.find((j) => j.type ==
   && ['QUEUED', 'RUNNING', 'PAUSING', 'PAUSED', 'CANCELLING'].includes(j.status)))
 const canExtract = computed(() => !!detail.value && !detail.value.summary.archived && !!probe.value
   && validation.value?.valid === true && !activeExtraction.value)
+const activeTranscription = computed(() => detail.value?.jobs.some((j) => j.type === 'TRANSCRIBE'
+  && ['QUEUED', 'RUNNING', 'PAUSING', 'PAUSED', 'CANCELLING'].includes(j.status)) ?? false)
+const transcriptionPanel = ref<{ load: () => Promise<void> } | null>(null)
+
+async function transcriptionStarted(jobId: string) {
+  selectedJobId.value = jobId
+  await load()
+}
 
 async function load() {
   try {
@@ -40,7 +48,7 @@ onMounted(async () => {
   storage.value = await api<StorageInfo>('/system/storage').catch(() => null)
   unsubscribe = $live.subscribe('/topic/projects', (body) => {
     if ((body as ProjectSummary).id !== id.value || reloadTimer) return
-    reloadTimer = setTimeout(() => { reloadTimer = null; load() }, 500)
+    reloadTimer = setTimeout(() => { reloadTimer = null; load(); transcriptionPanel.value?.load() }, 500)
   })
 })
 onBeforeUnmount(() => {
@@ -167,6 +175,15 @@ function streamLabel(s: { index: number; codec: string | null; channels: number 
               <audio controls preload="none" class="w-100" :src="`/api/assets/${detail.extractedAudio.id}/content`" />
             </div>
           </BCard>
+        </div>
+
+        <!-- Dialogue (M3b) -->
+        <div class="col-12">
+          <TranscriptionPanel ref="transcriptionPanel" :project-id="detail.summary.id"
+                              :ready="!!detail.extractedAudio && !detail.summary.archived"
+                              :busy="activeTranscription || detail.summary.archived"
+                              :default-language="detail.summary.sourceLanguage ?? 'auto'"
+                              @started="transcriptionStarted" />
         </div>
 
         <!-- Jobs -->

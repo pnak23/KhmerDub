@@ -17,40 +17,43 @@ import com.khmerdub.api.project.DubProjectRepository;
 import com.khmerdub.api.project.ProjectStatus;
 import com.khmerdub.api.storage.MediaFiles;
 import com.khmerdub.api.storage.StorageService;
-import java.io.IOException;
-import java.nio.file.FileAlreadyExistsException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 /**
  * Stage-specific knowledge: how a stage is split into chunks, what a worker receives, how a result is
- * verified and published, and how stages weigh in job progress.
+ * verified and published, and how stages weigh in job progress. Speech stages (M3b) are delegated to
+ * {@link SpeechStagePlanner}.
  */
 @Component
 public class StagePlanner {
 
     public static final int ASR_SAMPLE_RATE = 16_000;
+    static final Set<Stage> SPEECH_STAGES = EnumSet.of(Stage.SPEECH_MAP, Stage.DETECT_LANGUAGE, Stage.TRANSCRIBE,
+            Stage.DIARIZE, Stage.RECONCILE_SPEAKERS, Stage.BUILD_DIALOGUE);
 
     private final ChunkRepository chunks;
     private final MediaAssetRepository assets;
     private final DubProjectRepository projects;
     private final ProcessingProfileRepository profiles;
-    private final StorageService storage;
+    private final OutputPublisher publisher;
+    private final SpeechStagePlanner speech;
 
     public StagePlanner(ChunkRepository chunks, MediaAssetRepository assets, DubProjectRepository projects,
-                        ProcessingProfileRepository profiles, StorageService storage) {
+                        ProcessingProfileRepository profiles, OutputPublisher publisher, SpeechStagePlanner speech) {
         this.chunks = chunks;
         this.assets = assets;
         this.projects = projects;
         this.profiles = profiles;
-        this.storage = storage;
+        this.publisher = publisher;
+        this.speech = speech;
     }
 
     // ------------------------------------------------------------------------------------------- planning
@@ -58,6 +61,9 @@ public class StagePlanner {
     public List<ProcessingChunk> plan(ProcessingJob job, Stage stage) {
         DubProject project = projects.findById(job.getProjectId())
                 .orElseThrow(() -> new PlanningException("Project not found"));
+        if (SPEECH_STAGES.contains(stage)) {
+            return chunks.saveAll(speech.plan(job, stage, project, profile(project)));
+        }
         MediaAsset original = assets.findFirstByProjectIdAndType(project.getId(), MediaAssetType.ORIGINAL_VIDEO)
                 .orElseThrow(() -> new PlanningException("The project has no movie yet"));
         List<ProcessingChunk> planned = new ArrayList<>();
@@ -97,12 +103,15 @@ public class StagePlanner {
         return chunks.saveAll(planned);
     }
 
-    /** Relative weight of each stage of a job type in the overall progress (sums to 1). */
-    public Map<Stage, Double> stageWeights(JobType type) {
+    /** Relative weight of each stage of a job in the overall progress (sums to 1). */
+    public Map<Stage, Double> stageWeights(ProcessingJob job) {
         Map<Stage, Double> weights = new LinkedHashMap<>();
+        JobType type = job.getType();
         if (type == JobType.EXTRACT_AUDIO) {
             weights.put(Stage.EXTRACT_AUDIO, 0.9);
             weights.put(Stage.MERGE_AUDIO, 0.1);
+        } else if (type == JobType.TRANSCRIBE) {
+            weights.putAll(SpeechStagePlanner.weights(job));
         } else {
             for (Stage s : type.stages()) {
                 weights.put(s, 1.0 / type.stages().size());
@@ -112,7 +121,9 @@ public class StagePlanner {
     }
 
     public Map<String, Object> taskInput(ProcessingChunk chunk) {
-        return new HashMap<>(chunk.getParams());
+        Map<String, Object> input = new HashMap<>(chunk.getParams());
+        input.keySet().removeIf(k -> k.startsWith("_")); // engine-internal bookkeeping, not for the worker
+        return input;
     }
 
     // ------------------------------------------------------------------------------------- accepting results
@@ -122,10 +133,15 @@ public class StagePlanner {
      * Publishing (the file move) is the last fallible step.
      */
     public void accept(ProcessingJob job, ProcessingChunk chunk, ProcessingAttempt attempt, CompleteRequest result) {
+        if (SPEECH_STAGES.contains(chunk.getStage())) {
+            DubProject project = projects.findById(job.getProjectId()).orElseThrow();
+            speech.accept(job, chunk, attempt, result, project);
+            return;
+        }
         switch (chunk.getStage()) {
             case INSPECT_MEDIA -> acceptInspection(job, result);
             case EXTRACT_AUDIO -> {
-                Output out = single(result, "audio");
+                Output out = OutputPublisher.single(result, "audio");
                 requireSamples(out, chunk);
                 MediaAsset asset = publish(job, attempt, out, MediaAssetType.AUDIO_CHUNK,
                         "extracted/%s/segments/%04d-%s.wav".formatted(job.getId(), chunk.getChunkIndex(), attempt.getId()),
@@ -134,7 +150,7 @@ public class StagePlanner {
                 chunk.setResultAssetId(asset.getId());
             }
             case MERGE_AUDIO -> {
-                Output out = single(result, "audio");
+                Output out = OutputPublisher.single(result, "audio");
                 requireSamples(out, chunk);
                 MediaAsset asset = publish(job, attempt, out, MediaAssetType.EXTRACTED_AUDIO,
                         "extracted/%s/audio-16k-mono-%s.wav".formatted(job.getId(), attempt.getId()),
@@ -220,53 +236,8 @@ public class StagePlanner {
 
     private MediaAsset publish(ProcessingJob job, ProcessingAttempt attempt, Output out, MediaAssetType type,
                                String targetInProject, String mime, Map<String, Object> metadata) {
-        String workPrefix = StorageService.attemptWorkDir(job.getProjectId(), attempt.getId()) + "/";
-        if (!out.path().startsWith(workPrefix)) {
-            throw new InvalidOutputException("Output is outside this attempt's folder: " + out.path());
-        }
-        String targetRelative = StorageService.projectDir(job.getProjectId()) + "/" + targetInProject;
-        Path source = storage.resolve(out.path());
-        Path target = storage.resolve(targetRelative);
-        try {
-            if (!Files.exists(source)) {
-                // A retried completion after an earlier commit failure: accept only if the published file matches.
-                if (Files.exists(target) && Files.size(target) == out.sizeBytes()
-                        && StorageService.sha256(target).equals(out.sha256())) {
-                    return register(job, attempt, type, target, targetRelative, mime, out, metadata);
-                }
-                throw new InvalidOutputException("Output file is missing: " + out.path());
-            }
-            long size = Files.size(source);
-            if (size != out.sizeBytes()) {
-                throw new InvalidOutputException("Size mismatch for %s: worker said %d, file has %d"
-                        .formatted(out.path(), out.sizeBytes(), size));
-            }
-            String hash = StorageService.sha256(source);
-            if (!hash.equals(out.sha256())) {
-                throw new InvalidOutputException("Checksum mismatch for " + out.path());
-            }
-            storage.publish(source, target);
-        } catch (FileAlreadyExistsException e) {
-            throw new InvalidOutputException("Refusing to overwrite existing file " + targetRelative);
-        } catch (IOException e) {
-            throw new InvalidOutputException("Could not publish %s: %s".formatted(out.path(), e.getMessage()));
-        }
-        return register(job, attempt, type, target, targetRelative, mime, out, metadata);
-    }
-
-    private MediaAsset register(ProcessingJob job, ProcessingAttempt attempt, MediaAssetType type, Path target,
-                                String relative, String mime, Output out, Map<String, Object> metadata) {
-        MediaAsset asset = new MediaAsset(job.getProjectId(), type, target.getFileName().toString(), relative, mime,
-                out.sizeBytes(), out.sha256(), attempt.getId());
-        Map<String, Object> md = new HashMap<>(metadata);
-        md.values().removeIf(java.util.Objects::isNull);
-        asset.setMetadata(md);
-        return assets.save(asset);
-    }
-
-    private static Output single(CompleteRequest result, String role) {
-        return result.outputsOrEmpty().stream().filter(o -> role.equals(o.role())).findFirst()
-                .orElseThrow(() -> new InvalidOutputException("Missing output '" + role + "'"));
+        return publisher.publish(job, attempt, out, type,
+                StorageService.projectDir(job.getProjectId()) + "/" + targetInProject, mime, metadata);
     }
 
     private static void requireSamples(Output out, ProcessingChunk chunk) {
@@ -295,7 +266,7 @@ public class StagePlanner {
         return project.getSourceAudioStreamIndex();
     }
 
-    private ProcessingProfile profile(DubProject project) {
+    ProcessingProfile profile(DubProject project) {
         return (project.getProcessingProfileId() == null
                 ? profiles.findFirstByDefaultProfileTrue()
                 : profiles.findById(project.getProcessingProfileId()))

@@ -29,6 +29,8 @@ services:
     command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory-policy", "noeviction"]
     ports:
       - "127.0.0.1:${REDIS_PORT:-6380}:6379"
+    # default: reachable from Windows (FastAPI publishes tasks); ml-internal: reachable from the isolated worker.
+    networks: [default, ml-internal]
     volumes:
       - redisdata:/data
     healthcheck:
@@ -37,26 +39,46 @@ services:
       timeout: 5s
       retries: 10
 
+  # Fixed-target relay: the isolated worker's ONLY route out, and only to Spring Boot on Windows.
+  # No secrets, no data mounts, read-only filesystem. It forwards bytes; it cannot be aimed elsewhere.
+  api-relay:
+    profiles: ["linux-worker"]
+    image: khmerdub-worker:ml
+    restart: unless-stopped
+    command: ["python", "-m", "khmerdub_ai.net.relay"]
+    environment:
+      RELAY_TARGET_HOST: host.docker.internal
+      RELAY_TARGET_PORT: ${API_PORT:-8180}
+      RELAY_LISTEN_PORT: ${API_PORT:-8180}
+    read_only: true
+    networks: [default, ml-internal]
+
   # Linux Celery worker (opt-in: --profile linux-worker). Media stays on Windows, bind-mounted at /data.
+  # Network: ml-internal only (no internet, no direct host access). Spring via api-relay, queue via redis.
   worker-cpu:
     profiles: ["linux-worker"]
     build:
       context: ../apps/ai
-      dockerfile: Dockerfile.worker
-    image: khmerdub-worker:dev
+      dockerfile: Dockerfile.worker-ml
+    image: khmerdub-worker:ml
     hostname: khmerdub-worker-cpu
     restart: unless-stopped
-    # Only the variables the worker needs (not the whole .env).
+    # Only the variables the worker needs (not the whole .env; never HF_TOKEN or GEMINI_API_KEY).
     environment:
       KHMERDUB_ENV_FILE: /nonexistent.env
       KHMERDUB_STORAGE_ROOT: /data
       KHMERDUB_FFMPEG_DIR: ""
       KHMERDUB_INTERNAL_TOKEN: ${KHMERDUB_INTERNAL_TOKEN:?set KHMERDUB_INTERNAL_TOKEN in .env}
       KHMERDUB_CLOUD_ENABLED: ${KHMERDUB_CLOUD_ENABLED:-false}
+      KHMERDUB_MODELS_DIR: /data/models
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      API_HOST: host.docker.internal
+      API_HOST: api-relay
       API_PORT: ${API_PORT:-8180}
+      API_HOST_HEADER: host.docker.internal
+      HF_HUB_OFFLINE: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      PYANNOTE_METRICS_ENABLED: "0"
       CELERY_VISIBILITY_TIMEOUT_S: ${CELERY_VISIBILITY_TIMEOUT_S:-7200}
       # Test-only fault injection for recovery scenarios; keep false in normal use.
       KHMERDUB_DIAGNOSTICS: ${KHMERDUB_DIAGNOSTICS:-false}
@@ -64,14 +86,27 @@ services:
       - type: bind
         source: ${KHMERDUB_STORAGE_ROOT:?set KHMERDUB_STORAGE_ROOT in .env}
         target: /data
+      # Verified models: read-only on top of the data mount.
+      - type: bind
+        source: ${KHMERDUB_STORAGE_ROOT}/models
+        target: /data/models
+        read_only: true
       - type: bind
         source: ../apps/ai/khmerdub_ai
         target: /app/khmerdub_ai
         read_only: true
+    networks: [ml-internal]
     stop_grace_period: 60s
     depends_on:
       redis:
         condition: service_healthy
+      api-relay:
+        condition: service_started
+
+networks:
+  # No route to the internet or to the host. Members: redis, api-relay, worker-cpu.
+  ml-internal:
+    internal: true
 
 volumes:
   pgdata:

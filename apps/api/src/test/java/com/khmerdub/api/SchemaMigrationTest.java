@@ -34,11 +34,12 @@ class SchemaMigrationTest {
         assertThat(tables).contains(
                 "dub_projects", "media_assets", "processing_jobs", "processing_chunks", "job_events", "speakers",
                 "voice_profiles", "dialogue_segments", "audio_clips", "audio_clip_versions", "subtitle_tracks",
-                "processing_profiles");
+                "processing_profiles", "processing_attempts", "dialogue_revisions", "glossary_terms",
+                "review_operations", "privacy_actions");
         String version = jdbc.queryForObject(
                 "SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank DESC LIMIT 1",
                 String.class);
-        assertThat(version).isEqualTo("2");
+        assertThat(version).isEqualTo("3");
     }
 
     @Test
@@ -117,9 +118,12 @@ class SchemaMigrationTest {
     @Test
     void sameTtsInputIsNeverStoredTwiceForAClip() {
         UUID project = newProject();
+        UUID revision = jdbc.queryForObject("""
+                INSERT INTO dialogue_revisions (project_id, revision_no, status, activated_at)
+                VALUES (?, 1, 'ACTIVE', now()) RETURNING id""", UUID.class, project);
         UUID segment = jdbc.queryForObject("""
-                INSERT INTO dialogue_segments (project_id, sequence_no, start_ms, end_ms, source_text)
-                VALUES (?, 0, 1000, 2500, 'Hello') RETURNING id""", UUID.class, project);
+                INSERT INTO dialogue_segments (project_id, revision_id, sequence_no, start_ms, end_ms, source_text)
+                VALUES (?, ?, 0, 1000, 2500, 'Hello') RETURNING id""", UUID.class, project, revision);
         UUID clip = jdbc.queryForObject(
                 "INSERT INTO audio_clips (dialogue_segment_id) VALUES (?) RETURNING id", UUID.class, segment);
         UUID asset1 = insertAsset(project, "TTS_CLIP", "projects/" + project + "/voices/c1-v1.wav");

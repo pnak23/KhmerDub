@@ -78,6 +78,10 @@ public class ProcessingAttempt {
     @Column(nullable = false)
     private Map<String, Object> metrics = new HashMap<>();
 
+    /** When the reported progress last changed (keep-awake stall detection). */
+    @Column(name = "progress_changed_at")
+    private OffsetDateTime progressChangedAt;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
@@ -132,4 +136,14 @@ public class ProcessingAttempt {
     public String getErrorDetails() { return errorDetails; }
     public Map<String, Object> getMetrics() { return metrics; }
     public void setMetrics(Map<String, Object> metrics) { this.metrics = metrics; }
+    public OffsetDateTime getProgressChangedAt() { return progressChangedAt; }
+
+    /** Record a heartbeat's progress; remembers when the value last moved. */
+    public void reportProgress(double value, OffsetDateTime now) {
+        BigDecimal before = progress;
+        setProgress(value);
+        if (progressChangedAt == null || before.compareTo(progress) != 0) {
+            progressChangedAt = now;
+        }
+    }
 }

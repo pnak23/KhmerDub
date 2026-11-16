@@ -54,6 +54,12 @@ public class DubProject {
     @Column(name = "archived_at")
     private OffsetDateTime archivedAt;
 
+    @Column(name = "voice_fingerprints_forgotten_at")
+    private OffsetDateTime voiceFingerprintsForgottenAt;
+
+    @Column(name = "voice_samples_deleted_at")
+    private OffsetDateTime voiceSamplesDeletedAt;
+
     @Version
     @Column(nullable = false)
     private long version;
@@ -94,6 +100,10 @@ public class DubProject {
     public OffsetDateTime getArchivedAt() { return archivedAt; }
     public void setArchivedAt(OffsetDateTime archivedAt) { this.archivedAt = archivedAt; }
     public boolean isArchived() { return archivedAt != null; }
+    public OffsetDateTime getVoiceFingerprintsForgottenAt() { return voiceFingerprintsForgottenAt; }
+    public void setVoiceFingerprintsForgottenAt(OffsetDateTime at) { this.voiceFingerprintsForgottenAt = at; }
+    public OffsetDateTime getVoiceSamplesDeletedAt() { return voiceSamplesDeletedAt; }
+    public void setVoiceSamplesDeletedAt(OffsetDateTime at) { this.voiceSamplesDeletedAt = at; }
     public long getVersion() { return version; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }

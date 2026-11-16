@@ -139,7 +139,7 @@ switch ($Command) {
         }
         if ($Service -in 'all', 'worker') {
             Stop-AppService 'worker-win'
-            Invoke-Docker @('stop', 'worker-cpu')
+            Invoke-Docker @('stop', 'worker-cpu', 'api-relay')
         }
         if ($All) { Invoke-Docker @('stop') }
     }

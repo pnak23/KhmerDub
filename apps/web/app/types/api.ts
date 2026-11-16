@@ -157,3 +157,63 @@ export interface UploadResult {
   original: AssetView
   importJob: JobBrief
 }
+
+// ---------------------------------------------------------------------------------------- M3b: dialogue
+
+export type TranscriptionMode = 'QUALITY' | 'FAST'
+export type RevisionStatus = 'BUILDING' | 'READY' | 'ACTIVE' | 'SUPERSEDED' | 'FAILED'
+
+export interface TranscriptionRequest {
+  mode: TranscriptionMode
+  language: string
+  diarize?: boolean
+  confirmReprocess: boolean
+}
+
+export interface RevisionView {
+  id: string
+  revisionNo: number
+  status: RevisionStatus
+  mode: TranscriptionMode | null
+  summary: Record<string, number | undefined>
+  sourceJobId: string | null
+  backupAssetId: string | null
+  createdAt: string
+  activatedAt: string | null
+  supersededAt: string | null
+}
+
+export interface SpeakerView {
+  id: string
+  code: string
+  characterName: string | null
+  speechMs: number
+  segmentCount: number
+  displayOrder: number
+  reviewStatus: string
+  voiceProfileId: string | null
+  sampleAssetIds: string[]
+}
+
+export interface LineView {
+  id: string
+  seq: number
+  startMs: number
+  endMs: number
+  speakerId: string | null
+  sourceText: string
+  sourceTextEdited: string | null
+  editedText: string | null
+  confidence: number | null
+  speakerPurity: number | null
+  flags: Record<string, boolean>
+  reviewStatus: string
+}
+
+export interface DialoguePage {
+  revisionId: string
+  revisionStatus: RevisionStatus
+  total: number
+  fromSeq: number
+  lines: LineView[]
+}
