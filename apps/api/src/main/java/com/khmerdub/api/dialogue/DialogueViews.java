@@ -38,18 +38,53 @@ public final class DialogueViews {
         }
     }
 
+    /** mergedIntoId set = this speaker was merged away (kept, with its id, so the merge can be undone). */
     public record SpeakerView(UUID id, String code, String characterName, long speechMs, int segmentCount,
-                              int displayOrder, String reviewStatus, UUID voiceProfileId, List<UUID> sampleAssetIds) {
+                              int displayOrder, String reviewStatus, UUID voiceProfileId, List<UUID> sampleAssetIds,
+                              String description, String suggestedCategory, String voiceAssignment, String origin,
+                              UUID mergedIntoId, long version) {
+
+        public static SpeakerView of(Speaker s, List<UUID> sampleAssetIds) {
+            return new SpeakerView(s.getId(), s.getSpeakerCode(), s.getCharacterName(), s.getSpeechMs(),
+                    s.getSegmentCount(), s.getDisplayOrder(), s.getReviewStatus(), s.getVoiceProfileId(), sampleAssetIds,
+                    s.getDescription(), s.getSuggestedCategory(), s.getVoiceAssignment(), s.getOrigin(),
+                    s.getMergedIntoId(), s.getVersion());
+        }
     }
 
+    /**
+     * sourceText = recognised text (never edited), sourceTextEdited = your Chinese correction, editedText = your Khmer.
+     * version must be sent back with any change to the line.
+     */
     public record LineView(UUID id, int seq, long startMs, long endMs, UUID speakerId, String sourceText,
                            String sourceTextEdited, String editedText, Float confidence, Float speakerPurity,
-                           Map<String, Object> flags, String reviewStatus) {
+                           Map<String, Object> flags, String reviewStatus, String speakerAssignment, long version,
+                           List<Map<String, Object>> words) {
 
-        static LineView of(DialogueSegment s) {
+        public static LineView of(DialogueSegment s) {
             return new LineView(s.getId(), s.getSequenceNo(), s.getStartMs(), s.getEndMs(), s.getSpeakerId(),
                     s.getSourceText(), s.getSourceTextEdited(), s.getEditedText(), s.getConfidence(),
-                    s.getSpeakerPurity(), s.getFlags(), s.getReviewStatus());
+                    s.getSpeakerPurity(), s.getFlags(), s.getReviewStatus(), s.getSpeakerAssignment(), s.getVersion(),
+                    s.getWords());
+        }
+    }
+
+    /** What the user changed in a revision; shown before switching to another revision (it stays with this one). */
+    public record EditSummary(UUID revisionId, int revisionNo, String status, long lines, long linesWithChineseEdits,
+                              long linesWithKhmer, long approvedLines, long manualSpeakerAssignments, long speakers,
+                              long namedSpeakers, long reviewedSpeakers, long speakersWithVoice, long reviewOperations) {
+
+        public boolean hasEdits() {
+            return linesWithChineseEdits + linesWithKhmer + approvedLines + manualSpeakerAssignments + namedSpeakers
+                    + reviewedSpeakers + speakersWithVoice + reviewOperations > 0;
+        }
+    }
+
+    /** Optional filters of the dialogue listing (all null = everything). */
+    public record DialogueFilter(UUID speakerId, String flag, String text, String reviewStatus) {
+
+        public boolean any() {
+            return speakerId != null || flag != null || (text != null && !text.isBlank()) || reviewStatus != null;
         }
     }
 

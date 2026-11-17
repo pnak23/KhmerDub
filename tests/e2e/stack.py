@@ -1,6 +1,11 @@
 """Helpers for whole-stack tests: talk to the real API, control services, inject faults, make fixtures.
 
 Requires the running stack (scripts/dev.ps1 start). Run with the apps/ai venv Python.
+
+The defaults target the normal local stack. An isolated test stack is selected with environment variables
+(KHMERDUB_API, KHMERDUB_WEB, KHMERDUB_STORAGE_ROOT, KHMERDUB_WORKER_CONTAINER, KHMERDUB_E2E_COMPOSE as a JSON list
+of docker arguments, KHMERDUB_E2E_DEV_SCRIPT, KHMERDUB_E2E_PG_CONTAINER). With KHMERDUB_E2E_ISOLATED=1 every one of them must be set and point
+away from the normal stack, otherwise nothing runs.
 """
 
 from __future__ import annotations
@@ -19,12 +24,35 @@ import httpx
 
 REPO = Path(__file__).resolve().parents[2]
 API = os.environ.get("KHMERDUB_API", "http://127.0.0.1:8180")
+WEB = os.environ.get("KHMERDUB_WEB", "http://localhost:3000")
 DATA = Path(os.environ.get("KHMERDUB_STORAGE_ROOT", "D:/KhmerDub/data"))
 FFMPEG = os.environ.get("KHMERDUB_FFMPEG", "D:/KhmerDub/tools/ffmpeg/bin/ffmpeg.exe")
-WORKER = "khmerdub-worker-cpu-1"
-COMPOSE = ["docker", "compose", "-f", str(REPO / "infra/docker-compose.yml"), "--env-file", str(REPO / ".env"),
-           "--profile", "linux-worker"]
+WORKER = os.environ.get("KHMERDUB_WORKER_CONTAINER", "khmerdub-worker-cpu-1")
+COMPOSE = (json.loads(os.environ["KHMERDUB_E2E_COMPOSE"]) if os.environ.get("KHMERDUB_E2E_COMPOSE") else
+           ["docker", "compose", "-f", str(REPO / "infra/docker-compose.yml"), "--env-file", str(REPO / ".env"),
+            "--profile", "linux-worker"])
+DEV_SCRIPT = Path(os.environ.get("KHMERDUB_E2E_DEV_SCRIPT", str(REPO / "scripts/dev.ps1")))
+PG_CONTAINER = os.environ.get("KHMERDUB_E2E_PG_CONTAINER", "khmerdub-postgres-1")
 FAULTS = DATA / "temp" / "diagnostics" / "faults.json"
+
+
+def _require_isolated() -> None:
+    """KHMERDUB_E2E_ISOLATED=1: refuse to start unless every target is overridden away from the normal stack."""
+    names = ("KHMERDUB_API", "KHMERDUB_WEB", "KHMERDUB_STORAGE_ROOT", "KHMERDUB_WORKER_CONTAINER", "KHMERDUB_E2E_COMPOSE",
+             "KHMERDUB_E2E_DEV_SCRIPT", "KHMERDUB_E2E_PG_CONTAINER")
+    missing = [n for n in names if not os.environ.get(n)]
+    normal = [what for what, bad in (
+        ("API port 8180", ":8180" in API), ("web port 3000", ":3000" in WEB),
+        ("normal storage", DATA.resolve() == Path("D:/KhmerDub/data").resolve()),
+        ("normal worker", WORKER == "khmerdub-worker-cpu-1"), ("normal database", PG_CONTAINER == "khmerdub-postgres-1"),
+        ("normal compose", str(REPO / "infra") in " ".join(COMPOSE)),
+        ("normal dev.ps1", DEV_SCRIPT.resolve() == (REPO / "scripts/dev.ps1").resolve())) if bad]
+    if missing or normal:
+        raise SystemExit(f"KHMERDUB_E2E_ISOLATED=1 but not isolated: missing {missing}, normal {normal}")
+
+
+if os.environ.get("KHMERDUB_E2E_ISOLATED") == "1":
+    _require_isolated()
 
 http = httpx.Client(base_url=API, timeout=60)
 T = TypeVar("T")
@@ -77,7 +105,7 @@ def upload(project_id: str, path: Path, base: str = API, name: str | None = None
 
     return httpx.post(f"{base}/api/projects/{project_id}/upload", content=chunks(), timeout=3600, headers={
         "Content-Type": "application/octet-stream", "Content-Length": str(size),
-        "X-File-Name": quote(name or path.name), "Origin": "http://localhost:3000"})
+        "X-File-Name": quote(name or path.name), "Origin": WEB})
 
 
 def job(job_id: str) -> dict[str, Any]:
@@ -199,7 +227,7 @@ def dev(*args: str, diagnostics: bool | None = None) -> None:
     # Output goes to DEVNULL, not a pipe: on Windows the services dev.ps1 starts inherit the pipe handles and
     # keep them open, so capturing output would wait forever for an end-of-file that never comes.
     subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
-                    str(REPO / "scripts/dev.ps1"), *args], check=True, env=env,
+                    str(DEV_SCRIPT), *args], check=True, env=env,
                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 

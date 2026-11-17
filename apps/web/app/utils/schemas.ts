@@ -37,6 +37,40 @@ export function needsReprocessConfirmation(code: string | undefined): boolean {
   return code === 'REPROCESS_CONFIRMATION_REQUIRED'
 }
 
+// ---------------------------------------------------------------------------------------- M3b-2: review forms
+
+const voiceCategory = z.enum(['ADULT_MALE', 'ADULT_FEMALE', 'BOY', 'GIRL', 'ELDERLY_MALE', 'ELDERLY_FEMALE', 'CUSTOM'],
+  { message: 'Choose a category' })
+
+/** Speaker card details. Empty strings clear a field. */
+export const speakerSchema = z.object({
+  characterName: z.string().max(150, 'At most 150 characters'),
+  description: z.string().max(2000, 'At most 2000 characters'),
+  suggestedCategory: z.union([voiceCategory, z.literal('')]),
+})
+
+/** One dialogue line: your Chinese correction and your Khmer (the recognised text is never edited). */
+export const lineTextSchema = z.object({
+  chinese: z.string().max(5000, 'At most 5000 characters'),
+  khmer: z.string().max(5000, 'At most 5000 characters'),
+})
+
+export const glossaryTermSchema = z.object({
+  sourceTerm: z.string().trim().min(1, 'Enter the correct spelling').max(200, 'At most 200 characters'),
+  category: z.enum(['CHARACTER', 'PLACE', 'TERM'], { message: 'Choose a category' }),
+  variants: z.string().max(10_000, 'Too long'),
+  khmerTerm: z.string().max(200, 'At most 200 characters'),
+  notes: z.string().max(2000, 'At most 2000 characters'),
+})
+
+/** Local voice library entry (no TTS provider yet). */
+export const voiceProfileSchema = z.object({
+  displayName: z.string().trim().min(1, 'Enter a name').max(150, 'At most 150 characters'),
+  voiceCategory,
+  language: z.string().regex(/^[a-z]{2,3}(-[A-Z]{2})?$/, 'Use a code like km-KH'),
+  style: z.string().max(100, 'At most 100 characters'),
+})
+
 /** The movie file: type, emptiness and size are checked before anything is uploaded. */
 export function movieFileSchema(maxUploadBytes: number) {
   return z.instanceof(File, { message: 'Choose a movie file' })

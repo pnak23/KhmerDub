@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ComponentHealth } from '~/stores/system'
+import type { MlStatus } from '~/types/api'
 
 interface WorkerBeat {
   hostname?: string
@@ -27,6 +28,23 @@ const workers = computed(() => (aiParts.value.workers?.details?.workers ?? []) a
 const ffmpeg = computed(() => aiParts.value.ffmpeg?.details as Record<string, { path?: string; version?: string }> | undefined)
 
 const detail = (c: ComponentHealth | undefined, key: string) => c?.details?.[key] as string | number | boolean | undefined
+
+/** Speech stack (M3b): allow-listed fields only — no paths, tokens or voice fingerprints. */
+const ml = ref<MlStatus | null>(null)
+const mlError = ref<string | null>(null)
+async function loadMl() {
+  try {
+    ml.value = await api<MlStatus>('/system/ml')
+    mlError.value = null
+  } catch (e) {
+    mlError.value = toApiError(e).message
+  }
+}
+onMounted(loadMl)
+
+function yesNo(v: boolean | null | undefined): { text: string; variant: 'success' | 'danger' | 'secondary' } {
+  return v === true ? { text: 'Yes', variant: 'success' } : v === false ? { text: 'No', variant: 'danger' } : { text: 'Unknown', variant: 'secondary' }
+}
 </script>
 
 <template>
@@ -134,6 +152,59 @@ const detail = (c: ComponentHealth | undefined, key: string) => c?.details?.[key
             </template>
             <template v-else>Round trip failed: {{ system.roundTrip.error ?? system.roundTrip.sharedStorage?.error }}</template>
           </BAlert>
+        </BCard>
+      </div>
+
+      <!-- Speech stack (M3b) -->
+      <div class="col-12">
+        <BCard class="kd-speech-stack">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <h2 class="h6 mb-0"><Icon name="tabler:brain" /> Speech stack</h2>
+            <BButton size="sm" variant="outline-secondary" class="ms-auto" @click="loadMl"><Icon name="tabler:refresh" /> Refresh</BButton>
+          </div>
+          <BAlert :model-value="!!mlError" variant="danger" class="small py-2">{{ mlError }}</BAlert>
+          <div v-if="ml" class="row g-3 small">
+            <div class="col-lg-6">
+              <div class="fw-medium mb-1">Verified models</div>
+              <p v-if="ml.models.manifest === 'missing'" class="text-warning-emphasis">No verified model manifest found.</p>
+              <table v-else class="table table-sm mb-0 kd-models">
+                <thead><tr><th>Model</th><th>Revision</th><th>Files</th><th>Size</th><th>Verified</th></tr></thead>
+                <tbody>
+                  <tr v-for="(m, name) in ml.models.list" :key="name">
+                    <td class="kd-mono">{{ name }}</td>
+                    <td class="kd-mono">{{ m.revision?.slice(0, 10) ?? '—' }}</td>
+                    <td>
+                      {{ m.filesPresent ?? '?' }} / {{ m.files ?? '?' }}
+                      <BBadge v-if="m.filesPresent !== null && m.files !== null && m.filesPresent < m.files" variant="danger">missing</BBadge>
+                    </td>
+                    <td>{{ formatBytes(m.bytes) }}</td>
+                    <td>{{ m.verifiedAt ?? '—' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="col-lg-6">
+              <div class="fw-medium mb-1">ML worker self-check</div>
+              <p v-if="!ml.worker.reported" class="text-body-secondary kd-worker-unreported">
+                Not reported yet: the worker reports when it starts.
+              </p>
+              <dl v-else class="kd-dl mb-2 kd-worker-report">
+                <dt>Reported</dt><dd>{{ fromNow(ml.worker.reportedAt) }} <BBadge v-if="ml.worker.stale" variant="warning">old</BBadge> · {{ ml.worker.platform ?? '' }}</dd>
+                <dt>Packages</dt><dd><BBadge :variant="yesNo(ml.worker.ml?.versionsOk).variant">{{ yesNo(ml.worker.ml?.versionsOk).text }}</BBadge></dd>
+                <dt>Silero VAD</dt><dd><BBadge :variant="yesNo(ml.worker.ml?.sileroVadOk).variant">{{ yesNo(ml.worker.ml?.sileroVadOk).text }}</BBadge></dd>
+                <dt>Offline</dt><dd>HF_HUB_OFFLINE={{ ml.worker.offline?.HF_HUB_OFFLINE ?? '?' }} · telemetry off: {{ ml.worker.offline?.HF_HUB_DISABLE_TELEMETRY === '1' && ml.worker.offline?.PYANNOTE_METRICS_ENABLED === '0' ? 'yes' : 'no' }}</dd>
+                <dt>Internet blocked</dt><dd><BBadge :variant="yesNo(ml.worker.network?.internetBlocked).variant">{{ yesNo(ml.worker.network?.internetBlocked).text }}</BBadge></dd>
+                <dt>Isolated + connected</dt><dd><BBadge :variant="yesNo(ml.worker.network?.isolatedAndConnected).variant">{{ yesNo(ml.worker.network?.isolatedAndConnected).text }}</BBadge>
+                  <span class="text-body-secondary"> Redis {{ ml.worker.network?.redis ?? '?' }} · API {{ ml.worker.network?.spring ?? '?' }}</span></dd>
+              </dl>
+              <div class="fw-medium mb-1">Keep-awake</div>
+              <dl class="kd-dl mb-0 kd-keep-awake">
+                <dt>Holding</dt><dd><BBadge :variant="ml.keepAwake.holding ? 'primary' : 'secondary'">{{ ml.keepAwake.holding ? 'PC kept awake' : 'Not holding' }}</BBadge>
+                  <span v-if="ml.keepAwake.enabled === false" class="text-body-secondary"> (disabled)</span></dd>
+                <dt>Reason</dt><dd>{{ ml.keepAwake.reason ?? '—' }}</dd>
+              </dl>
+            </div>
+          </div>
         </BCard>
       </div>
 

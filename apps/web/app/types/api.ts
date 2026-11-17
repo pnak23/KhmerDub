@@ -183,6 +183,11 @@ export interface RevisionView {
   supersededAt: string | null
 }
 
+export type VoiceCategory = 'ADULT_MALE' | 'ADULT_FEMALE' | 'BOY' | 'GIRL' | 'ELDERLY_MALE' | 'ELDERLY_FEMALE' | 'CUSTOM'
+export type SpeakerReviewStatus = 'UNREVIEWED' | 'REVIEWED'
+export type LineReviewStatus = 'PENDING' | 'NEEDS_REVIEW' | 'APPROVED' | 'REJECTED'
+
+/** mergedIntoId set = merged away (kept so the merge can be undone). Never contains voice fingerprints. */
 export interface SpeakerView {
   id: string
   code: string
@@ -190,11 +195,25 @@ export interface SpeakerView {
   speechMs: number
   segmentCount: number
   displayOrder: number
-  reviewStatus: string
+  reviewStatus: SpeakerReviewStatus | string
   voiceProfileId: string | null
   sampleAssetIds: string[]
+  description: string | null
+  suggestedCategory: VoiceCategory | null
+  voiceAssignment: 'NONE' | 'SUGGESTED' | 'MANUAL' | string
+  origin: 'DIARIZATION' | 'SPLIT' | 'MANUAL' | string
+  mergedIntoId: string | null
+  version: number
 }
 
+export interface WordTiming {
+  w: string
+  s: number
+  e: number
+  p?: number
+}
+
+/** sourceText = recognised (read-only), sourceTextEdited = your Chinese correction, editedText = your Khmer. */
 export interface LineView {
   id: string
   seq: number
@@ -207,7 +226,113 @@ export interface LineView {
   confidence: number | null
   speakerPurity: number | null
   flags: Record<string, boolean>
-  reviewStatus: string
+  reviewStatus: LineReviewStatus | string
+  speakerAssignment: 'AUTO' | 'MANUAL' | string
+  version: number
+  words: WordTiming[]
+}
+
+// ---------------------------------------------------------------------------------------- M3b-2: review
+
+export interface OperationView {
+  id: string
+  seq: number
+  type: string
+  summary: string
+  createdAt: string | null
+  undoneAt: string | null
+  undoable: boolean
+}
+
+export interface OperationResult {
+  operation: OperationView
+  lines: LineView[]
+  speakers: SpeakerView[]
+  removedLineIds: string[]
+  removedSpeakerIds: string[]
+}
+
+export interface EditSummary {
+  revisionId: string
+  revisionNo: number
+  status: RevisionStatus
+  lines: number
+  linesWithChineseEdits: number
+  linesWithKhmer: number
+  approvedLines: number
+  manualSpeakerAssignments: number
+  speakers: number
+  namedSpeakers: number
+  reviewedSpeakers: number
+  speakersWithVoice: number
+  reviewOperations: number
+}
+
+export type GlossaryCategory = 'CHARACTER' | 'PLACE' | 'TERM'
+
+export interface GlossaryTerm {
+  id: string
+  category: GlossaryCategory
+  sourceTerm: string
+  variants: string[]
+  khmerTerm: string | null
+  notes: string | null
+  speakerCode: string | null
+  version: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface GlossaryPreviewLine {
+  segmentId: string
+  seq: number
+  version: number
+  before: string
+  after: string
+  matches: { variant: string; term: string; count: number }[]
+}
+
+export interface GlossaryPreview {
+  revisionId: string
+  token: string
+  lines: number
+  replacements: number
+  changes: GlossaryPreviewLine[]
+}
+
+/** Local library entry. provider is always NONE (no TTS yet); nothing is sent anywhere. */
+export interface VoiceProfile {
+  id: string
+  displayName: string
+  provider: string
+  providerVoiceId: string
+  language: string
+  voiceCategory: VoiceCategory
+  style: string | null
+  active: boolean
+  usedBySpeakers: number
+  createdAt: string
+  updatedAt: string
+}
+
+/** /api/system/ml: allow-listed fields only (no paths, tokens or fingerprints). */
+export interface MlStatus {
+  checkedAt: string
+  models: {
+    manifest: 'present' | 'missing'
+    list?: Record<string, { revision: string | null; files: number | null; bytes: number | null; license: string | null;
+      verifiedAt: string | null; filesPresent: number | null }>
+  }
+  worker: {
+    reported: boolean
+    reportedAt?: string | null
+    stale?: boolean
+    platform?: string | null
+    ml?: { ok: boolean | null; versionsOk: boolean | null; sileroVadOk: boolean | null; models?: Record<string, boolean | null> }
+    offline?: Record<string, string | null>
+    network?: { internetBlocked: boolean | null; redis: string | null; spring: string | null; isolatedAndConnected: boolean | null }
+  }
+  keepAwake: { enabled: boolean | null; holding: boolean | null; reason: string | null; lastChange: string | null }
 }
 
 export interface DialoguePage {

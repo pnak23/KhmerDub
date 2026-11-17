@@ -1,7 +1,9 @@
 package com.khmerdub.api.dialogue;
 
 import com.khmerdub.api.dialogue.DialogueViews.ActivateRequest;
+import com.khmerdub.api.dialogue.DialogueViews.DialogueFilter;
 import com.khmerdub.api.dialogue.DialogueViews.DialoguePage;
+import com.khmerdub.api.dialogue.DialogueViews.EditSummary;
 import com.khmerdub.api.dialogue.DialogueViews.RevisionView;
 import com.khmerdub.api.dialogue.DialogueViews.SpeakerView;
 import com.khmerdub.api.dialogue.DialogueViews.StartTranscriptionRequest;
@@ -51,10 +53,21 @@ public class DialogueController {
         return service.speakers(projectId, revisionId);
     }
 
+    /** Lines in order; optional filters: speakerId, flag (any|lowConfidence|mixedSpeakers|firstWordRetimed), q, reviewStatus. */
     @GetMapping("/dialogue")
     public DialoguePage dialogue(@PathVariable UUID projectId, @RequestParam(required = false) UUID revisionId,
                                  @RequestParam(defaultValue = "0") int fromSeq,
-                                 @RequestParam(defaultValue = "200") int limit) {
-        return service.dialogue(projectId, revisionId, fromSeq, limit);
+                                 @RequestParam(defaultValue = "200") int limit,
+                                 @RequestParam(required = false) UUID speakerId,
+                                 @RequestParam(required = false) String flag,
+                                 @RequestParam(required = false) String q,
+                                 @RequestParam(required = false) String reviewStatus) {
+        return service.dialogue(projectId, revisionId, fromSeq, limit, new DialogueFilter(speakerId, flag, q, reviewStatus));
+    }
+
+    /** What the user changed in a revision (shown before switching to another revision). */
+    @GetMapping("/dialogue-revisions/{revisionId}/edit-summary")
+    public EditSummary editSummary(@PathVariable UUID projectId, @PathVariable UUID revisionId) {
+        return service.editSummary(projectId, revisionId);
     }
 }
