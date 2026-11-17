@@ -19,7 +19,7 @@ import org.hibernate.type.SqlTypes;
 
 /**
  * One complete result of a TRANSCRIBE run. Exactly one revision per project is ACTIVE; a new run never touches it.
- * READY waits for the user to activate it; SUPERSEDED revisions are kept read-only.
+ * READY waits for the user to activate it; SUPERSEDED revisions are kept read-only and can be activated again.
  */
 @Entity
 @Table(name = "dialogue_revisions")

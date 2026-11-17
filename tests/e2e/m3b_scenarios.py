@@ -115,7 +115,7 @@ def s11_full_run(clip: Path) -> dict[str, Any]:
 
 
 def _assets_of(pid: str, kind: str) -> list[str]:
-    out = subprocess.run(["docker", "exec", "khmerdub-postgres-1", "sh", "-c",
+    out = subprocess.run(["docker", "exec", stack.PG_CONTAINER, "sh", "-c",
                           f"psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -At -c \"select id from media_assets "
                           f"where project_id = '{pid}' and asset_type = '{kind}'\""], capture_output=True, text=True)
     return [x for x in out.stdout.split() if x]

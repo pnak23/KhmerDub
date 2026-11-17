@@ -21,6 +21,7 @@ import traceback
 import wave
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).parent))
 import stack  # noqa: E402
@@ -254,12 +255,13 @@ def s10_proxy_buffering(fx):
     """Does the Nuxt proxy buffer request bodies? Send 300 MB through it and through Spring directly."""
     pid = stack.create_project("E2E S10 proxy check")
     CREATED.append(pid)
+    web_port = urlparse(stack.WEB).port
     node_pid = int(subprocess.run(["powershell", "-NoProfile", "-Command",
-                                   "(Get-NetTCPConnection -State Listen -LocalPort 3000).OwningProcess"],
+                                   f"(Get-NetTCPConnection -State Listen -LocalPort {web_port}).OwningProcess"],
                                   capture_output=True, text=True).stdout.split()[0])
     body = fx["fake300"]  # MKV magic under a .mp4 name: Spring rejects it after 64 bytes, nothing is stored
     results = {}
-    for label, base in (("throughNuxtProxy", "http://localhost:3000"), ("directToSpring", stack.API)):
+    for label, base in (("throughNuxtProxy", stack.WEB), ("directToSpring", stack.API)):
         baseline = working_set(node_pid)
         peak = [baseline]
         done = threading.Event()

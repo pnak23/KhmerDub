@@ -17,6 +17,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import tools.jackson.core.JacksonException;
@@ -31,6 +33,13 @@ import tools.jackson.databind.ObjectMapper;
 public class DialogueBackupService {
 
     public static final String FORMAT = "khmerdub.dialogue-backup.v1";
+    /**
+     * What the user is told when a backup fails (code BACKUP_FAILED). Stable and free of internals: no paths, no
+     * exception names. Whatever needed the backup did not happen, so the same request can simply be retried.
+     */
+    public static final String FAILED_MESSAGE = "The dialogue could not be backed up, so nothing was changed. "
+            + "Check that the data drive has free space and can be written to, then try again.";
+    private static final Logger log = LoggerFactory.getLogger(DialogueBackupService.class);
     private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS");
 
     private final SpeakerRepository speakers;
@@ -94,20 +103,31 @@ public class DialogueBackupService {
             } catch (IOException ignored) {
                 // nothing more to do
             }
-            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "BACKUP_FAILED",
-                    "Could not write a verified backup of the current dialogue (" + e.getClass().getSimpleName()
-                            + "). Nothing was changed.");
+            // Diagnostics stay in the server log: ids, the backup's storage-relative name and the kind of failure.
+            // Never the absolute path (it can contain user folder names) or an I/O exception's message (it usually
+            // is that path); only our own verification messages are logged verbatim.
+            String why = e instanceof VerificationFailed ? e.getMessage() : e.getClass().getSimpleName();
+            log.warn("Dialogue backup failed: project {} revision {} (no. {}), file {}: {}", revision.getProjectId(),
+                    revision.getId(), revision.getRevisionNo(), relative, why);
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "BACKUP_FAILED", FAILED_MESSAGE);
         }
     }
 
     private void verify(Path file, String expectedSha, int speakerCount, int lineCount) throws IOException {
         if (!StorageService.sha256(file).equals(expectedSha)) {
-            throw new IOException("backup checksum mismatch after writing");
+            throw new VerificationFailed("backup checksum mismatch after writing");
         }
         Map<String, Object> back = json.readValue(file.toFile(), new TypeReference<Map<String, Object>>() { });
         if (!FORMAT.equals(back.get("format")) || !(back.get("speakers") instanceof List<?> s)
                 || !(back.get("lines") instanceof List<?> l) || s.size() != speakerCount || l.size() != lineCount) {
-            throw new IOException("backup content check failed");
+            throw new VerificationFailed("backup content check failed");
+        }
+    }
+
+    /** The written backup did not read back as written (our own message, safe to log). */
+    private static final class VerificationFailed extends IOException {
+        VerificationFailed(String message) {
+            super(message);
         }
     }
 }

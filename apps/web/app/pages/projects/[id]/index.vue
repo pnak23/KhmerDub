@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useForm } from 'vee-validate'
-import type { JobBrief, ProjectDetail, ProjectSummary, StorageInfo } from '~/types/api'
+import type { EditSummary, JobBrief, ProjectDetail, ProjectSummary, RevisionView, StorageInfo } from '~/types/api'
 
 const route = useRoute()
 const id = computed(() => String(route.params.id))
@@ -21,10 +21,25 @@ const canExtract = computed(() => !!detail.value && !detail.value.summary.archiv
 const activeTranscription = computed(() => detail.value?.jobs.some((j) => j.type === 'TRANSCRIBE'
   && ['QUEUED', 'RUNNING', 'PAUSING', 'PAUSED', 'CANCELLING'].includes(j.status)) ?? false)
 const transcriptionPanel = ref<{ load: () => Promise<void> } | null>(null)
+const activeRevision = ref<RevisionView | null>(null)
+const edits = ref<EditSummary | null>(null)
+
+/** The dialogue in use and what has been reviewed in it so far (counts only). */
+async function loadReview() {
+  const revisions = await api<RevisionView[]>(`/projects/${id.value}/dialogue-revisions`).catch(() => [])
+  activeRevision.value = revisions.find((r) => r.status === 'ACTIVE') ?? null
+  edits.value = activeRevision.value
+    ? await api<EditSummary>(`/projects/${id.value}/dialogue-revisions/${activeRevision.value.id}/edit-summary`).catch(() => null)
+    : null
+}
 
 async function transcriptionStarted(jobId: string) {
   selectedJobId.value = jobId
   await load()
+}
+
+async function revisionChanged() {
+  await loadReview()
 }
 
 async function load() {
@@ -45,10 +60,11 @@ let reloadTimer: ReturnType<typeof setTimeout> | null = null
 let unsubscribe: (() => void) | null = null
 onMounted(async () => {
   await load()
+  await loadReview()
   storage.value = await api<StorageInfo>('/system/storage').catch(() => null)
   unsubscribe = $live.subscribe('/topic/projects', (body) => {
     if ((body as ProjectSummary).id !== id.value || reloadTimer) return
-    reloadTimer = setTimeout(() => { reloadTimer = null; load(); transcriptionPanel.value?.load() }, 500)
+    reloadTimer = setTimeout(() => { reloadTimer = null; load(); loadReview(); transcriptionPanel.value?.load() }, 500)
   })
 })
 onBeforeUnmount(() => {
@@ -92,6 +108,7 @@ function streamLabel(s: { index: number; codec: string | null; channels: number 
   <div>
     <BAlert :model-value="!!loadError" variant="danger">{{ loadError }}</BAlert>
     <template v-if="detail">
+      <ReviewNav :project-id="detail.summary.id" current="overview" :title="detail.summary.name" />
       <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
         <h1 class="h4 mb-0">{{ detail.summary.name }}</h1>
         <BBadge variant="secondary">{{ humanize(detail.summary.status) }}</BBadge>
@@ -177,13 +194,35 @@ function streamLabel(s: { index: number; codec: string | null; channels: number 
           </BCard>
         </div>
 
+        <!-- Review (M3b-2): the dialogue in use and what has been reviewed -->
+        <div v-if="activeRevision" class="col-12">
+          <BCard class="kd-review-summary">
+            <div class="d-flex flex-wrap align-items-center gap-2">
+              <h2 class="h6 mb-0"><Icon name="tabler:checklist" /> Review</h2>
+              <BBadge variant="success">Revision {{ activeRevision.revisionNo }} in use</BBadge>
+              <span class="small text-body-secondary">{{ edits?.lines ?? activeRevision.summary.lines }} lines ·
+                {{ edits?.speakers ?? activeRevision.summary.speakers }} speakers</span>
+              <div class="ms-auto d-flex gap-2">
+                <NuxtLink :to="`/projects/${detail.summary.id}/speakers`" class="btn btn-sm btn-outline-primary"><Icon name="tabler:users" /> Speakers</NuxtLink>
+                <NuxtLink :to="`/projects/${detail.summary.id}/dialogue`" class="btn btn-sm btn-outline-primary"><Icon name="tabler:messages" /> Dialogue</NuxtLink>
+                <NuxtLink :to="`/projects/${detail.summary.id}/glossary`" class="btn btn-sm btn-outline-primary"><Icon name="tabler:book" /> Glossary</NuxtLink>
+              </div>
+            </div>
+            <div v-if="edits" class="small mt-2 kd-edit-counts">
+              {{ edits.namedSpeakers }} named · {{ edits.reviewedSpeakers }} reviewed speakers ·
+              {{ edits.linesWithChineseEdits }} Chinese corrections · {{ edits.linesWithKhmer }} Khmer lines ·
+              {{ edits.approvedLines }} approved · {{ edits.reviewOperations }} changes
+            </div>
+          </BCard>
+        </div>
+
         <!-- Dialogue (M3b) -->
         <div class="col-12">
           <TranscriptionPanel ref="transcriptionPanel" :project-id="detail.summary.id"
                               :ready="!!detail.extractedAudio && !detail.summary.archived"
                               :busy="activeTranscription || detail.summary.archived"
                               :default-language="detail.summary.sourceLanguage ?? 'auto'"
-                              @started="transcriptionStarted" />
+                              @started="transcriptionStarted" @changed="revisionChanged" />
         </div>
 
         <!-- Jobs -->

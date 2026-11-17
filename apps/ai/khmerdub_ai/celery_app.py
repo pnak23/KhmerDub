@@ -38,5 +38,6 @@ app.conf.update(
     task_routes={"khmerdub.system.*": {"queue": "cpu"}},
 )
 
-# Register worker signal handlers (heartbeat).
+# Register worker signal handlers (heartbeat; start-up self-report for the System page).
 from khmerdub_ai import heartbeat  # noqa: E402,F401
+from khmerdub_ai import status  # noqa: E402,F401
