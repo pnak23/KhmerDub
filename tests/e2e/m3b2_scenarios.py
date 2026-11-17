@@ -331,6 +331,8 @@ def s21_revisions(clip: Path) -> dict[str, Any]:
     done = patch_line(pid, x, editedText="បន្ត")
     undo(pid, done["operation"]["id"])
     assert export(pid, rev1) == work1
+    assert len(operations(pid)) == ops1 + 1, "the history lists that edit (undone)"
+    ops1 += 1
     sample_keep_awake()
 
     # repeated switching neither duplicates nor loses anything

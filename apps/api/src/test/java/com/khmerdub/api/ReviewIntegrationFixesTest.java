@@ -5,14 +5,49 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
+import com.khmerdub.api.dialogue.DialogueRevision;
+import com.khmerdub.api.dialogue.DialogueViews.StartTranscriptionRequest;
+import com.khmerdub.api.dialogue.TranscriptionService;
+import com.khmerdub.api.job.JobEnums.JobStatus;
+import com.khmerdub.api.job.JobRepository;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /** Regressions found by the M3b-2 Step 3 integration review. */
 @IntegrationTest
 class ReviewIntegrationFixesTest extends ReviewTestSupport {
+
+    @Autowired JobRepository jobs;
+    @Autowired TranscriptionService transcription;
+
+    /**
+     * Found by E2E S19 on real speech: a freshly imported revision stored the worker's diarization speaking time,
+     * while every review change recounts speech time from the lines, so the first edit (even if undone) changed
+     * every speaker's numbers. Imported numbers now use the same definition, and edit + undo restores everything.
+     */
+    @Test
+    void importedSpeakerNumbersMatchTheReviewRecountSoEditPlusUndoChangesNothing() throws Exception {
+        SpeechFixtures sx = new SpeechFixtures(fx, engine, jobs, projects, transcription, storage, json);
+        UUID p = sx.audioReadyProject(12 * SpeechFixtures.MIN);
+        assertThat(sx.run(sx.start(p, new StartTranscriptionRequest(null, null, null, false)), null, "-v1"))
+                .isEqualTo(JobStatus.COMPLETED);
+        UUID rev = revisions.findFirstByProjectIdAndStatus(p, DialogueRevision.Status.ACTIVE).orElseThrow().getId();
+        // fixture lines: SPK_01 1000-2500 + 10000-12000, SPK_02 6000-8000 (the worker reported 3000 ms each)
+        assertThat(jdbc.queryForList("SELECT speaker_code, speech_ms, segment_count FROM speakers WHERE revision_id = ? "
+                + "ORDER BY speaker_code", rev)).containsExactly(
+                Map.of("speaker_code", "SPK_01", "speech_ms", 3_500L, "segment_count", 2),
+                Map.of("speaker_code", "SPK_02", "speech_ms", 2_000L, "segment_count", 1));
+        Map<String, Object> imported = export(rev);
+        UUID line = jdbc.queryForObject("SELECT id FROM dialogue_segments WHERE revision_id = ? AND sequence_no = 1",
+                UUID.class, rev);
+        Map<String, Object> edit = send(patch("/api/projects/{p}/segments/{s}", p, line),
+                map("version", lineVersion(line), "editedText", "សួស្តី"), 200);
+        send(post("/api/projects/{p}/review-operations/{o}/undo", p, operation(edit).get("id")), null, 200);
+        assertThat(export(rev)).isEqualTo(imported);
+    }
 
     private List<Map<String, Object>> history(UUID project, int limit) throws Exception {
         return sendList(get("/api/projects/{p}/review-operations", project).param("limit", String.valueOf(limit)), 200);

@@ -81,6 +81,17 @@ public class DialogueImporter {
         }
         revision = revisions.saveAndFlush(revision);
 
+        // A speaker's speech time and line count come from its lines, exactly as review changes recount them
+        // (ReviewStore.recountSpeakers): one definition, so the first edit or its undo never changes these numbers.
+        // (The worker's own speechMs is diarization speaking time, a different measure.) Invalid lines fail below.
+        Map<String, long[]> stats = new HashMap<>();
+        for (Map<String, Object> ln : lines) {
+            if (ln.get("speaker") != null && ln.get("startMs") instanceof Number s && ln.get("endMs") instanceof Number e) {
+                long[] st = stats.computeIfAbsent(ln.get("speaker").toString(), k -> new long[2]);
+                st[0] += Math.max(0, e.longValue() - s.longValue());
+                st[1]++;
+            }
+        }
         Map<String, UUID> speakerIds = new LinkedHashMap<>();
         int order = 0;
         for (Map<String, Object> s : speakerList) {
@@ -88,8 +99,8 @@ public class DialogueImporter {
             if (!code.matches("SPK_\\d{2,3}") || speakerIds.containsKey(code)) {
                 throw new InvalidOutputException("Invalid or duplicate speaker code " + code);
             }
-            Speaker sp = speakers.save(new Speaker(project.getId(), revision.getId(), code, nonNegative(s.get("speechMs")),
-                    (int) nonNegative(s.get("lines")), order++));
+            long[] st = stats.getOrDefault(code, new long[2]);
+            Speaker sp = speakers.save(new Speaker(project.getId(), revision.getId(), code, st[0], (int) st[1], order++));
             speakerIds.put(code, sp.getId());
         }
 
